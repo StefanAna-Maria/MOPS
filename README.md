@@ -1,1 +1,1 @@
-# MOPS
+# Proiect MOPS
