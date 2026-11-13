@@ -1,6 +1,7 @@
 import { randomInt, randomUUID } from "node:crypto";
 import app from "../src/index.js";
 import { prisma } from "../src/lib/prisma.js";
+import { sentEmails } from "../src/lib/email.js";
 
 export const STRONG_PASSWORD = "Parola123";
 
@@ -47,6 +48,20 @@ export function signUp(email: string, password: string, extra: Record<string, un
 
 export function signIn(email: string, password: string, ip?: string) {
   return send("POST", "/api/auth/sign-in/email", { email, password }, { ip });
+}
+
+export function verifyEmail(email: string, otp: string, ip?: string) {
+  return send("POST", "/api/auth/email-otp/verify-email", { email, otp }, { ip });
+}
+
+export function requestNewCode(email: string, ip?: string) {
+  return send("POST", "/api/auth/email-otp/send-verification-otp", { email, type: "email-verification" }, { ip });
+}
+
+// The database only holds a hash, so the code is read from the email that was "sent".
+export function lastCodeSentTo(email: string) {
+  const mail = sentEmails().findLast((message) => message.to === email);
+  return mail?.text.match(/\b(\d{6})\b/)?.[1];
 }
 
 export async function markEmailVerified(email: string) {

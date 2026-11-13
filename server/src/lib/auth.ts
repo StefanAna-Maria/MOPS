@@ -4,6 +4,7 @@ import { APIError, createAuthMiddleware } from "better-auth/api";
 import { emailOTP } from "better-auth/plugins";
 import { expo } from "@better-auth/expo";
 import { prisma } from "./prisma.js";
+import { sendEmail, verificationEmail } from "./email.js";
 import { USAGE_TYPES, isStrongPassword, isUsageType } from "@ocrinvoice/shared";
 
 export const auth = betterAuth({
@@ -17,6 +18,7 @@ export const auth = betterAuth({
   },
   emailVerification: {
     sendOnSignIn: true,
+    autoSignInAfterVerification: true,
   },
   user: {
     additionalFields: {
@@ -35,6 +37,14 @@ export const auth = betterAuth({
       "/sign-in/email": {
         window: 60,
         max: 5,
+      },
+      "/email-otp/send-verification-otp": {
+        window: 60,
+        max: 5,
+      },
+      "/email-otp/verify-email": {
+        window: 60,
+        max: 10,
       },
     },
   },
@@ -63,9 +73,15 @@ export const auth = betterAuth({
     expo(),
     emailOTP({
       overrideDefaultEmailVerification: true,
+      otpLength: 6,
+      expiresIn: 300,
+      storeOTP: "hashed",
       async sendVerificationOTP({ email, otp, type }) {
         if (process.env.NODE_ENV === "development") {
           console.log(`[email-otp] ${type} ${email}: ${otp}`);
+        }
+        if (type === "email-verification") {
+          await sendEmail(verificationEmail(email, otp));
         }
       },
     }),
