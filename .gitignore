@@ -1,0 +1,4 @@
+node_modules/
+shared/dist/
+.DS_Store
+coverage/
