@@ -34,7 +34,13 @@
         }
       ],
       "expo-secure-store",
-      "expo-font"
+      "expo-font",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Permite accesul la cameră pentru a fotografia bonuri și facturi."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

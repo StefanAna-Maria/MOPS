@@ -1,4 +1,5 @@
-import { render, screen } from "@testing-library/react-native";
+import { fireEvent, render, screen } from "@testing-library/react-native";
+import { router } from "expo-router";
 import HomeScreen from "@/app/(app)/index";
 
 jest.mock("@/components/context-switcher", () => ({ ContextSwitcher: () => null }));
@@ -6,6 +7,10 @@ jest.mock("@/components/account-menu", () => ({ AccountMenu: () => null }));
 jest.mock("@/lib/profile-context", () => ({
   useProfile: () => ({ profile: { firstName: "Ana", lastName: "Popescu" } }),
 }));
+
+beforeEach(() => {
+  jest.clearAllMocks();
+});
 
 afterEach(() => {
   jest.useRealTimers();
@@ -28,5 +33,13 @@ describe("Acasă", () => {
     await render(<HomeScreen />);
 
     expect(screen.getByText("OCRInvoice")).toBeOnTheScreen();
+  });
+
+  it("opens the camera scan screen when pressing Fotografiază un bon", async () => {
+    await render(<HomeScreen />);
+
+    await fireEvent.press(screen.getByRole("button", { name: "Fotografiază un bon" }));
+
+    expect(router.push).toHaveBeenCalledWith("/scan");
   });
 });
