@@ -1,7 +1,9 @@
 import { StyleSheet, Text, View } from "react-native";
+import { router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ContextSwitcher } from "@/components/context-switcher";
 import { AccountMenu } from "@/components/account-menu";
+import { PrimaryButton } from "@/components/primary-button";
 import { getGreeting } from "@/lib/greeting";
 import { useProfile } from "@/lib/profile-context";
 import { colors, spacing, typography } from "@/constants/theme";
@@ -26,6 +28,7 @@ export default function HomeScreen() {
         <Text style={styles.greeting}>
           {getGreeting()}, {profile?.firstName}
         </Text>
+        <PrimaryButton title="Adaugă o cheltuială" onPress={() => router.push("/add-expense")} />
       </View>
     </SafeAreaView>
   );
@@ -59,6 +62,7 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.xl,
+    gap: spacing.xl,
   },
   greeting: {
     ...typography.headlineXl,
