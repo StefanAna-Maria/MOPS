@@ -5,6 +5,7 @@ import {
   formatDisplayDate,
   isPaymentDateValid,
   isValidTimeZone,
+  monthBounds,
   parseAmount,
   parseDisplayDate,
   todayInTimeZone,
@@ -127,5 +128,13 @@ describe("validateManualExpense", () => {
   it("rejects a body that is not an object, or values of the wrong type", () => {
     expect(validateManualExpense(null, today).ok).toBe(false);
     expect(validateManualExpense({ ...valid, amount: 12.5 }, today).ok).toBe(false);
+  });
+});
+
+describe("monthBounds", () => {
+  it("CA-04.5: returns the first day of the month and of the next month", () => {
+    expect(monthBounds("2026-11-14")).toEqual({ start: "2026-11-01", end: "2026-12-01" });
+    expect(monthBounds("2026-12-31")).toEqual({ start: "2026-12-01", end: "2027-01-01" });
+    expect(monthBounds("2026-01-01")).toEqual({ start: "2026-01-01", end: "2026-02-01" });
   });
 });

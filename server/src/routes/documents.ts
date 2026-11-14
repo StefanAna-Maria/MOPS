@@ -5,6 +5,7 @@ import { Prisma } from "../generated/prisma/client.js";
 import {
   DEFAULT_TIME_ZONE,
   isValidTimeZone,
+  monthBounds,
   todayInTimeZone,
   validateManualExpense,
   type ExpenseDocument,
@@ -59,6 +60,26 @@ function findByRequestId(userId: string, clientRequestId: string) {
   });
 }
 
+function utcDate(isoDate: string) {
+  return new Date(`${isoDate}T00:00:00.000Z`);
+}
+
+// CA-04.1 / CA-04.5 / CA-04.6: the signed-in user's documents from the current month in the phone's time zone,
+// newest first.
+documents.get("/", async (c) => {
+  const user = c.get("user");
+  const today = todayInTimeZone(requestTimeZone(c.req.header("X-Time-Zone")));
+  const { start, end } = monthBounds(today);
+
+  const found = await prisma.document.findMany({
+    where: { userId: user.id, date: { gte: utcDate(start), lt: utcDate(end) } },
+    include: documentWithLines,
+    orderBy: [{ date: "desc" }, { time: { sort: "desc", nulls: "last" } }, { createdAt: "desc" }],
+  });
+
+  return c.json({ month: start.slice(0, 7), documents: found.map(serializeDocument) });
+});
+
 documents.post("/manual", async (c) => {
   const user = c.get("user");
   const body = await c.req.json().catch(() => null);
@@ -87,7 +108,7 @@ documents.post("/manual", async (c) => {
         userId: user.id,
         type: "MANUAL",
         merchant: expense.description,
-        date: new Date(`${expense.date}T00:00:00.000Z`),
+        date: utcDate(expense.date),
         time: null,
         total: expense.amount,
         category: expense.category,

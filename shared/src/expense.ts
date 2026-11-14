@@ -217,3 +217,12 @@ export function validateManualExpense(body: unknown, today: string): ManualExpen
     },
   };
 }
+
+/** The month containing `isoDate`: its first day and the first day of the next month (exclusive). */
+export function monthBounds(isoDate: string): { start: string; end: string } {
+  const [year, month] = isoDate.split("-").map(Number);
+  const nextYear = month === 12 ? year + 1 : year;
+  const nextMonth = month === 12 ? 1 : month + 1;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return { start: `${year}-${pad(month)}-01`, end: `${nextYear}-${pad(nextMonth)}-01` };
+}
