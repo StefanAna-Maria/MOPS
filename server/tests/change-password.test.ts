@@ -62,6 +62,18 @@ describe("change password from account settings", () => {
     expect((await signIn(email, STRONG_PASSWORD)).status).toBe(200);
   });
 
+  it("a new password equal to the current one answers PASSWORD_SAME_AS_CURRENT and nothing changes", async () => {
+    const { email, cookie } = await createSignedInUser();
+    const otherCookie = sessionCookie(await signIn(email, STRONG_PASSWORD));
+
+    const response = await changePassword(STRONG_PASSWORD, STRONG_PASSWORD, cookie);
+
+    expect(response.status).toBe(400);
+    expect((await response.json()).code).toBe("PASSWORD_SAME_AS_CURRENT");
+    expect((await signIn(email, STRONG_PASSWORD)).status).toBe(200);
+    expect((await get("/api/me", { cookie: otherCookie })).status).toBe(200);
+  });
+
   it("requires a signed-in user", async () => {
     const response = await changePassword(STRONG_PASSWORD, NEW_PASSWORD, "");
 

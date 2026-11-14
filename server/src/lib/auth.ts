@@ -76,6 +76,12 @@ export const auth = betterAuth({
             message: "Password must have at least 8 characters, one digit and one uppercase letter",
           });
         }
+        if (ctx.body.newPassword === ctx.body.currentPassword) {
+          throw new APIError("BAD_REQUEST", {
+            code: "PASSWORD_SAME_AS_CURRENT",
+            message: "The new password must be different from the current one",
+          });
+        }
         // A new password always closes the other sessions; the current one is renewed and stays active (CA-02.18).
         return { context: { ...ctx, body: { ...ctx.body, revokeOtherSessions: true } } };
       }

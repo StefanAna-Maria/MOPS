@@ -107,6 +107,45 @@ describe("Schimbă parola", () => {
     expect(screen.getByText("Parolele nu coincid.")).toBeOnTheScreen();
   });
 
+  it("shows Parola coincide cu cea curentă! and blocks the change when the new password equals the current one", async () => {
+    await render(<ChangePasswordScreen />);
+
+    await fillForm("Parola123", "Parola123", "Parola123");
+
+    expect(screen.getByText("Parola coincide cu cea curentă!")).toBeOnTheScreen();
+    expect(submitButton()).toBeDisabled();
+    await fireEvent.press(submitButton());
+    expect(changePassword).not.toHaveBeenCalled();
+  });
+
+  it("the same-password warning disappears once the new password differs", async () => {
+    await render(<ChangePasswordScreen />);
+    await fillForm("Parola123", "Parola123", "Parola123");
+
+    await fillForm("Parola123", "NouaParola9", "NouaParola9");
+
+    expect(screen.queryByText("Parola coincide cu cea curentă!")).not.toBeOnTheScreen();
+    expect(submitButton()).toBeEnabled();
+  });
+
+  it("shows no same-password warning while the new password is empty", async () => {
+    await render(<ChangePasswordScreen />);
+
+    await fireEvent.changeText(screen.getByLabelText("Parola curentă"), "");
+
+    expect(screen.queryByText("Parola coincide cu cea curentă!")).not.toBeOnTheScreen();
+  });
+
+  it("shows a message when the server answers PASSWORD_SAME_AS_CURRENT", async () => {
+    changePassword.mockResolvedValue({ data: null, error: { status: 400, code: "PASSWORD_SAME_AS_CURRENT" } });
+    await render(<ChangePasswordScreen />);
+
+    await fillForm("Parola123", "NouaParola9", "NouaParola9");
+    await fireEvent.press(submitButton());
+
+    expect(Alert.alert).toHaveBeenCalledWith("Parola coincide cu cea curentă!", expect.any(String));
+  });
+
   it("CA-02.17: no mismatch message while the confirmation is empty or equal", async () => {
     await render(<ChangePasswordScreen />);
     expect(screen.queryByText("Parolele nu coincid.")).not.toBeOnTheScreen();
