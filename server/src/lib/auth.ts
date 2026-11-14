@@ -45,6 +45,10 @@ export const auth = betterAuth({
         window: 60,
         max: 5,
       },
+      "/change-password": {
+        window: 60,
+        max: 5,
+      },
       "/email-otp/send-verification-otp": {
         window: 60,
         max: 5,
@@ -65,6 +69,16 @@ export const auth = betterAuth({
   },
   hooks: {
     before: createAuthMiddleware(async (ctx) => {
+      if (ctx.path === "/change-password") {
+        if (typeof ctx.body?.newPassword !== "string" || !isStrongPassword(ctx.body.newPassword)) {
+          throw new APIError("BAD_REQUEST", {
+            code: "PASSWORD_TOO_WEAK",
+            message: "Password must have at least 8 characters, one digit and one uppercase letter",
+          });
+        }
+        // A new password always closes the other sessions; the current one is renewed and stays active (CA-02.18).
+        return { context: { ...ctx, body: { ...ctx.body, revokeOtherSessions: true } } };
+      }
       if (ctx.path !== "/sign-up/email" && ctx.path !== "/email-otp/reset-password") {
         return;
       }

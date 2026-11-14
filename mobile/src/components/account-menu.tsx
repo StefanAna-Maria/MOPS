@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
+import { router } from "expo-router";
 import { BottomSheet } from "@/components/bottom-sheet";
 import { SheetOption } from "@/components/sheet-option";
 import { authClient } from "@/lib/auth-client";
@@ -16,6 +17,11 @@ export function AccountMenu() {
   const initials = [profile?.firstName, profile?.lastName]
     .map((part) => part?.trim().charAt(0).toUpperCase() ?? "")
     .join("");
+
+  function handleChangePassword() {
+    setOpen(false);
+    router.push("/change-password");
+  }
 
   async function handleSignOut() {
     setOpen(false);
@@ -41,6 +47,7 @@ export function AccountMenu() {
           <Text style={styles.name}>{fullName}</Text>
           <Text style={styles.email}>{session?.user.email}</Text>
         </View>
+        <SheetOption title="Schimbă parola" onPress={handleChangePassword} />
         <SheetOption title="Deconectează-te" tone="danger" onPress={handleSignOut} />
       </BottomSheet>
     </>

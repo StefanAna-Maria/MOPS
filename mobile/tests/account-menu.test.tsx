@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react-native";
+import { router } from "expo-router";
 import { AccountMenu } from "@/components/account-menu";
 import { signOut } from "@/lib/sign-out";
 
@@ -24,6 +25,25 @@ describe("AccountMenu", () => {
 
     expect(screen.getByText("Ana Popescu")).toBeOnTheScreen();
     expect(screen.getByText("ana@example.com")).toBeOnTheScreen();
+  });
+
+  it("CA-02.15: shows Schimbă parola above Deconectează-te", async () => {
+    await render(<AccountMenu />);
+
+    await fireEvent.press(screen.getByRole("button", { name: "Contul meu" }));
+
+    const texts = screen.getAllByText(/Schimbă parola|Deconectează-te/).map((node) => node.props.children);
+    expect(texts).toEqual(["Schimbă parola", "Deconectează-te"]);
+  });
+
+  it("CA-02.15: Schimbă parola closes the menu and opens the form", async () => {
+    await render(<AccountMenu />);
+
+    await fireEvent.press(screen.getByRole("button", { name: "Contul meu" }));
+    await fireEvent.press(screen.getByRole("button", { name: "Schimbă parola" }));
+
+    expect(router.push).toHaveBeenCalledWith("/change-password");
+    expect(signOut).not.toHaveBeenCalled();
   });
 
   it("CA-01.14: Deconectează-te signs the user out", async () => {

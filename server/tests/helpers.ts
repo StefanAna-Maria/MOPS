@@ -58,6 +58,15 @@ export function requestNewCode(email: string, ip?: string) {
   return send("POST", "/api/auth/email-otp/send-verification-otp", { email, type: "email-verification" }, { ip });
 }
 
+export function changePassword(
+  currentPassword: string,
+  newPassword: string,
+  cookie: string,
+  extra: Record<string, unknown> = {},
+) {
+  return send("POST", "/api/auth/change-password", { currentPassword, newPassword, ...extra }, { cookie });
+}
+
 export function requestPasswordReset(email: string, ip?: string) {
   return send("POST", "/api/auth/email-otp/request-password-reset", { email }, { ip });
 }
