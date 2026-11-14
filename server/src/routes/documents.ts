@@ -80,6 +80,20 @@ documents.get("/", async (c) => {
   return c.json({ month: start.slice(0, 7), documents: found.map(serializeDocument) });
 });
 
+// CA-06.1 / CA-06.2: one document with its lines. Another user's document gets the same 404 as a missing one,
+// so its existence is not revealed.
+documents.get("/:id", async (c) => {
+  const user = c.get("user");
+  const document = await prisma.document.findFirst({
+    where: { id: c.req.param("id"), userId: user.id },
+    include: documentWithLines,
+  });
+  if (!document) {
+    return c.json({ code: "DOCUMENT_NOT_FOUND" }, 404);
+  }
+  return c.json({ document: serializeDocument(document) });
+});
+
 documents.post("/manual", async (c) => {
   const user = c.get("user");
   const body = await c.req.json().catch(() => null);

@@ -9,3 +9,7 @@ export const HOME_MESSAGES = {
   loadError: "Nu am putut încărca datele.",
   retry: "Încearcă din nou",
 };
+
+export const DOCUMENT_MESSAGES = {
+  notFound: "Documentul nu a fost găsit.",
+};

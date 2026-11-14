@@ -1,4 +1,4 @@
-import { StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import type { ExpenseDocument } from "@ocrinvoice/shared";
 import { amountToCents, documentSubtitle, formatLei } from "@/lib/expense-list";
 import { colors, radius, spacing, typography } from "@/constants/theme";
@@ -7,17 +7,25 @@ type ExpenseRowProps = {
   document: ExpenseDocument;
   first: boolean;
   last: boolean;
+  onPress: () => void;
 };
 
-export function ExpenseRow({ document, first, last }: ExpenseRowProps) {
+export function ExpenseRow({ document, first, last, onPress }: ExpenseRowProps) {
   const subtitle = documentSubtitle(document);
   const amount = formatLei(amountToCents(document.total));
 
   return (
-    <View
-      accessible
+    <Pressable
+      accessibilityRole="button"
       accessibilityLabel={`${document.merchant}, ${subtitle}, ${amount}`}
-      style={[styles.row, first && styles.first, last && styles.last, !last && styles.divider]}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.row,
+        first && styles.first,
+        last && styles.last,
+        !last && styles.divider,
+        pressed && styles.pressed,
+      ]}
     >
       <View style={styles.texts}>
         <Text style={styles.merchant} numberOfLines={1}>
@@ -28,7 +36,7 @@ export function ExpenseRow({ document, first, last }: ExpenseRowProps) {
         </Text>
       </View>
       <Text style={styles.amount}>{amount}</Text>
-    </View>
+    </Pressable>
   );
 }
 
@@ -57,6 +65,9 @@ const styles = StyleSheet.create({
   divider: {
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
+  },
+  pressed: {
+    backgroundColor: colors.background,
   },
   texts: {
     flex: 1,

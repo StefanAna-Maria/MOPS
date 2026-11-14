@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react-native";
+import { router } from "expo-router";
 import type { ExpenseDocument } from "@ocrinvoice/shared";
 import HomeScreen from "@/app/(app)/index";
 import { apiFetch } from "@/lib/api";
@@ -129,5 +130,16 @@ describe("Acasă - cheltuielile lunii", () => {
     await render(<HomeScreen />);
 
     expect(await screen.findByText(HOME_MESSAGES.loadError)).toBeOnTheScreen();
+  });
+});
+
+describe("Acasă - deschiderea unui document", () => {
+  it("CA-06.1: tapping a row opens the document's detail", async () => {
+    respondWith([doc("abc", "Piața Obor", "2026-11-14", "12.50")]);
+    await render(<HomeScreen />);
+
+    await fireEvent.press(await screen.findByRole("button", { name: /^Piața Obor,/ }));
+
+    expect(router.push).toHaveBeenCalledWith({ pathname: "/document/[id]", params: { id: "abc" } });
   });
 });

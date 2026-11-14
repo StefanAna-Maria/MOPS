@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { beforeEach, describe, expect, it } from "vitest";
 import app from "../src/index.js";
 import { prisma } from "../src/lib/prisma.js";
-import { createSignedInUser, resetDatabase, send } from "./helpers.js";
+import { createSignedInUser, get, resetDatabase, send } from "./helpers.js";
 
 const PATH = "/api/documents/manual";
 
@@ -305,5 +305,66 @@ describe("GET /api/documents", () => {
     const body = await (await list(other.cookie)).json();
 
     expect(body.documents).toEqual([]);
+  });
+});
+
+describe("GET /api/documents/:id", () => {
+  async function addExpense(cookie: string, extra: Record<string, unknown> = {}) {
+    const response = await send("POST", PATH, validExpense(extra), { cookie });
+    return (await response.json()).document as { id: string };
+  }
+
+  it("returns 401 without a session", async () => {
+    expect((await app.request("/api/documents/abc")).status).toBe(401);
+  });
+
+  it("CA-06.1: returns the document with its lines", async () => {
+    const { cookie } = await createSignedInUser();
+    const created = await addExpense(cookie, { category: "HEALTH", paymentMethod: "TRANSFER", note: "rețetă" });
+
+    const response = await get(`/api/documents/${created.id}`, { cookie });
+
+    expect(response.status).toBe(200);
+    const { document } = await response.json();
+    expect(document).toMatchObject({
+      id: created.id,
+      merchant: "Piața Obor",
+      date: todayIso(),
+      time: null,
+      total: "12.50",
+      category: "HEALTH",
+      paymentMethod: "TRANSFER",
+      note: "rețetă",
+    });
+    expect(document.lines).toEqual([
+      { id: expect.any(String), position: 1, name: "Piața Obor", amount: "12.50", category: "HEALTH" },
+    ]);
+  });
+
+  it("CA-06.1: also returns documents from earlier months", async () => {
+    const { cookie } = await createSignedInUser();
+    const created = await addExpense(cookie, { date: addDays(todayIso(), -60) });
+
+    expect((await get(`/api/documents/${created.id}`, { cookie })).status).toBe(200);
+  });
+
+  it("CA-06.2: returns 404 for a document that does not exist", async () => {
+    const { cookie } = await createSignedInUser();
+
+    const response = await get("/api/documents/does-not-exist", { cookie });
+
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({ code: "DOCUMENT_NOT_FOUND" });
+  });
+
+  it("CA-06.2: returns the same 404 for another user's document", async () => {
+    const owner = await createSignedInUser();
+    const created = await addExpense(owner.cookie);
+    const other = await createSignedInUser();
+
+    const response = await get(`/api/documents/${created.id}`, { cookie: other.cookie });
+
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({ code: "DOCUMENT_NOT_FOUND" });
   });
 });

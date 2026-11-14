@@ -67,7 +67,12 @@ export default function HomeScreen() {
           </View>
         )}
         renderItem={({ item, index, section }) => (
-          <ExpenseRow document={item} first={index === 0} last={index === section.data.length - 1} />
+          <ExpenseRow
+            document={item}
+            first={index === 0}
+            last={index === section.data.length - 1}
+            onPress={() => router.push({ pathname: "/document/[id]", params: { id: item.id } })}
+          />
         )}
       />
     </SafeAreaView>
