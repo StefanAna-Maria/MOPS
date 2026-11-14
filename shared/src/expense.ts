@@ -226,3 +226,12 @@ export function monthBounds(isoDate: string): { start: string; end: string } {
   const pad = (n: number) => String(n).padStart(2, "0");
   return { start: `${year}-${pad(month)}-01`, end: `${nextYear}-${pad(nextMonth)}-01` };
 }
+
+/** Which profile a document belongs to: the personal one, or the user's company. */
+export const DOCUMENT_CONTEXTS = ["personal", "company"] as const;
+
+export type DocumentContext = (typeof DOCUMENT_CONTEXTS)[number];
+
+export function isDocumentContext(value: unknown): value is DocumentContext {
+  return typeof value === "string" && (DOCUMENT_CONTEXTS as readonly string[]).includes(value);
+}

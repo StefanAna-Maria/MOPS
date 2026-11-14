@@ -368,3 +368,80 @@ describe("GET /api/documents/:id", () => {
     expect(await response.json()).toEqual({ code: "DOCUMENT_NOT_FOUND" });
   });
 });
+
+describe("personal and company documents", () => {
+  const company = { cui: "RO 14399840", name: "Exemplu SRL", address: "Str. Exemplu nr. 1, București" };
+
+  async function userWithCompany() {
+    const user = await createSignedInUser();
+    await send("POST", "/api/company", company, { cookie: user.cookie });
+    return user;
+  }
+
+  async function add(cookie: string, description: string, context?: string) {
+    return send("POST", PATH, validExpense({ description, ...(context ? { context } : {}) }), { cookie });
+  }
+
+  async function listMerchants(cookie: string, context?: string) {
+    const response = await get(`/api/documents${context ? `?context=${context}` : ""}`, { cookie });
+    return (await response.json()).documents.map((d: { merchant: string }) => d.merchant);
+  }
+
+  it("saves a company expense in the company and a personal one in the personal profile", async () => {
+    const { cookie } = await userWithCompany();
+
+    const personal = await (await add(cookie, "Cumpărături", "personal")).json();
+    const business = await (await add(cookie, "Consumabile birou", "company")).json();
+
+    expect(personal.document.context).toBe("personal");
+    expect(business.document.context).toBe("company");
+  });
+
+  it("keeps the personal and company lists separate, both ways", async () => {
+    const { cookie } = await userWithCompany();
+    await add(cookie, "Cumpărături", "personal");
+    await add(cookie, "Consumabile birou", "company");
+
+    expect(await listMerchants(cookie, "personal")).toEqual(["Cumpărături"]);
+    expect(await listMerchants(cookie, "company")).toEqual(["Consumabile birou"]);
+  });
+
+  it("uses the personal profile when no profile is sent", async () => {
+    const { cookie } = await userWithCompany();
+    await add(cookie, "Fără profil");
+    await add(cookie, "Consumabile birou", "company");
+
+    expect(await listMerchants(cookie)).toEqual(["Fără profil"]);
+  });
+
+  it("refuses the company profile for a user without a company", async () => {
+    const { cookie } = await createSignedInUser();
+
+    const save = await add(cookie, "Consumabile", "company");
+    const list = await get("/api/documents?context=company", { cookie });
+
+    expect(save.status).toBe(404);
+    expect((await save.json()).code).toBe("COMPANY_NOT_FOUND");
+    expect(list.status).toBe(404);
+    expect(await prisma.document.count()).toBe(0);
+  });
+
+  it("refuses an unknown profile", async () => {
+    const { cookie } = await createSignedInUser();
+
+    const save = await add(cookie, "Ceva", "family");
+    const list = await get("/api/documents?context=family", { cookie });
+
+    expect(save.status).toBe(400);
+    expect((await save.json()).code).toBe("INVALID_CONTEXT");
+    expect(list.status).toBe(400);
+  });
+
+  it("never shows another user's company documents", async () => {
+    const owner = await userWithCompany();
+    await add(owner.cookie, "Al firmei altcuiva", "company");
+    const other = await userWithCompany();
+
+    expect(await listMerchants(other.cookie, "company")).toEqual([]);
+  });
+});

@@ -12,6 +12,7 @@ const paramsMock = useLocalSearchParams as unknown as jest.Mock;
 
 const document: ExpenseDocument = {
   id: "doc-1",
+  context: "personal",
   type: "MANUAL",
   merchant: "Farmacia Tei",
   date: "2026-11-05",

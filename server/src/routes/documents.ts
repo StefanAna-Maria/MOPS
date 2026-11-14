@@ -4,6 +4,7 @@ import { requireSession, type SessionVariables } from "../lib/session.js";
 import { Prisma } from "../generated/prisma/client.js";
 import {
   DEFAULT_TIME_ZONE,
+  isDocumentContext,
   isValidTimeZone,
   monthBounds,
   todayInTimeZone,
@@ -26,6 +27,7 @@ function toIsoDate(date: Date) {
 export function serializeDocument(document: DocumentWithLines): ExpenseDocument {
   return {
     id: document.id,
+    context: document.companyId ? "company" : "personal",
     type: document.type,
     merchant: document.merchant,
     date: toIsoDate(document.date),
@@ -64,15 +66,39 @@ function utcDate(isoDate: string) {
   return new Date(`${isoDate}T00:00:00.000Z`);
 }
 
+type ContextResult = { ok: true; companyId: string | null } | { ok: false; status: 400 | 404; code: string };
+
+/**
+ * The profile a request works in. "personal" (or nothing) means documents without a company; "company" means the
+ * signed-in user's own company. The company is never taken from the request, so nobody can use another user's.
+ */
+async function resolveContext(userId: string, context: unknown): Promise<ContextResult> {
+  if (context === undefined || context === null || context === "personal") {
+    return { ok: true, companyId: null };
+  }
+  if (!isDocumentContext(context)) {
+    return { ok: false, status: 400, code: "INVALID_CONTEXT" };
+  }
+  const company = await prisma.company.findUnique({ where: { ownerId: userId }, select: { id: true } });
+  if (!company) {
+    return { ok: false, status: 404, code: "COMPANY_NOT_FOUND" };
+  }
+  return { ok: true, companyId: company.id };
+}
+
 // CA-04.1 / CA-04.5 / CA-04.6: the signed-in user's documents from the current month in the phone's time zone,
-// newest first.
+// newest first, for one profile only (?context=personal|company): the personal and company lists never mix.
 documents.get("/", async (c) => {
   const user = c.get("user");
+  const context = await resolveContext(user.id, c.req.query("context"));
+  if (!context.ok) {
+    return c.json({ code: context.code }, context.status);
+  }
   const today = todayInTimeZone(requestTimeZone(c.req.header("X-Time-Zone")));
   const { start, end } = monthBounds(today);
 
   const found = await prisma.document.findMany({
-    where: { userId: user.id, date: { gte: utcDate(start), lt: utcDate(end) } },
+    where: { userId: user.id, companyId: context.companyId, date: { gte: utcDate(start), lt: utcDate(end) } },
     include: documentWithLines,
     orderBy: [{ date: "desc" }, { time: { sort: "desc", nulls: "last" } }, { createdAt: "desc" }],
   });
@@ -109,6 +135,11 @@ documents.post("/manual", async (c) => {
     return c.json({ code: "INVALID_EXPENSE", fields: result.fields }, 400);
   }
 
+  const context = await resolveContext(user.id, body?.context);
+  if (!context.ok) {
+    return c.json({ code: context.code }, context.status);
+  }
+
   // CA-03.6: a retry or a second tap with the same request id returns the expense saved the first time.
   const existing = await findByRequestId(user.id, clientRequestId);
   if (existing) {
@@ -120,6 +151,7 @@ documents.post("/manual", async (c) => {
     const created = await prisma.document.create({
       data: {
         userId: user.id,
+        companyId: context.companyId,
         type: "MANUAL",
         merchant: expense.description,
         date: utcDate(expense.date),

@@ -29,8 +29,8 @@ function ListState({ state, onRetry }: { state: MonthDocumentsState; onRetry: ()
 }
 
 export default function HomeScreen() {
-  const { profile } = useProfile();
-  const { state, retry } = useMonthDocuments();
+  const { profile, activeContext } = useProfile();
+  const { state, retry } = useMonthDocuments(activeContext);
   const sections = state.status === "ok" ? groupByDay(state.documents, localTodayIso()) : [];
 
   return (

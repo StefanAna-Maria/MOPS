@@ -9,8 +9,13 @@ import { EXPENSE_MESSAGES } from "@/lib/expense-messages";
 jest.mock("@/lib/api", () => ({ apiFetch: jest.fn() }));
 jest.mock("@/components/context-switcher", () => ({ ContextSwitcher: () => null }));
 jest.mock("@/components/account-menu", () => ({ AccountMenu: () => null }));
+const mockProfile = { activeContext: "personal" as "personal" | "company" };
 jest.mock("@/lib/profile-context", () => ({
-  useProfile: () => ({ profile: { firstName: "Ana", lastName: "Popescu" } }),
+  useProfile: () => ({
+    profile: { firstName: "Ana", lastName: "Popescu" },
+    activeContext: mockProfile.activeContext,
+    company: { id: "co1", name: "Exemplu SRL" },
+  }),
 }));
 
 const apiFetchMock = apiFetch as unknown as jest.Mock;
@@ -46,6 +51,7 @@ function sentBody(call = 0) {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockProfile.activeContext = "personal";
   jest.useFakeTimers({ now: NOW, doNotFake: ["nextTick", "setImmediate", "queueMicrotask"] });
   jest.spyOn(Alert, "alert").mockImplementation(() => {});
 });
@@ -86,6 +92,7 @@ describe("Adaugă o cheltuială", () => {
     expect(apiFetchMock).toHaveBeenCalledWith("/api/documents/manual", expect.objectContaining({ method: "POST" }));
     expect(sentBody()).toEqual({
       clientRequestId: expect.any(String),
+      context: "personal",
       description: "Piața Obor",
       amount: "12.50",
       date: "2026-11-14",
@@ -185,5 +192,32 @@ describe("Adaugă o cheltuială", () => {
 
     expect(Alert.alert).toHaveBeenCalledWith("Nu am putut salva cheltuiala", expect.any(String));
     expect(router.back).not.toHaveBeenCalled();
+  });
+});
+
+describe("Adaugă o cheltuială - profilul", () => {
+  beforeEach(() => {
+    apiFetchMock.mockResolvedValue({ ok: true, status: 201, json: async () => ({ document: {} }) });
+  });
+
+  it("saves in the personal profile and says so", async () => {
+    await render(<AddExpenseScreen />);
+
+    expect(screen.getByText(/Se salvează în: Personal\./)).toBeOnTheScreen();
+    await fillValidForm();
+    await fireEvent.press(addButton());
+
+    expect(sentBody().context).toBe("personal");
+  });
+
+  it("saves in the company when the company profile is selected", async () => {
+    mockProfile.activeContext = "company";
+    await render(<AddExpenseScreen />);
+
+    expect(screen.getByText(/Se salvează în: Exemplu SRL\./)).toBeOnTheScreen();
+    await fillValidForm();
+    await fireEvent.press(addButton());
+
+    expect(sentBody().context).toBe("company");
   });
 });

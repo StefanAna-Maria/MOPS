@@ -44,6 +44,8 @@ export type DocumentLine = {
 
 export type ExpenseDocument = {
   id: string;
+  /** "personal", or "company" for a document of the user's company. */
+  context: "personal" | "company";
   type: string;
   merchant: string;
   date: string;

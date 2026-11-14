@@ -28,6 +28,7 @@ import { TextLink } from "@/components/text-link";
 import { apiFetch } from "@/lib/api";
 import { showServerUnavailable } from "@/lib/alerts";
 import { localTodayIso } from "@/lib/dates";
+import { useProfile } from "@/lib/profile-context";
 import { EXPENSE_MESSAGES } from "@/lib/expense-messages";
 import { createRequestId } from "@/lib/request-id";
 import { colors, spacing, typography } from "@/constants/theme";
@@ -35,6 +36,9 @@ import { colors, spacing, typography } from "@/constants/theme";
 type Field = "description" | "amount" | "date";
 
 export default function AddExpenseScreen() {
+  const { activeContext, company } = useProfile();
+  // The expense goes to the profile selected on Acasă (personal or company), and is shown only there.
+  const profileName = activeContext === "company" && company ? company.name : "Personal";
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
   const [date, setDate] = useState(() => formatDisplayDate(localTodayIso()));
@@ -71,6 +75,7 @@ export default function AddExpenseScreen() {
         method: "POST",
         body: JSON.stringify({
           clientRequestId: requestId.current,
+          context: activeContext,
           description: description.trim(),
           amount: normalizedAmount,
           date: isoDate,
@@ -97,7 +102,7 @@ export default function AddExpenseScreen() {
   }
 
   return (
-    <Screen title="Adaugă o cheltuială" subtitle="Pentru plățile fără bon.">
+    <Screen title="Adaugă o cheltuială" subtitle={`Pentru plățile fără bon. Se salvează în: ${profileName}.`}>
       <Card>
         <TextField
           label="Pentru ce ai plătit?"

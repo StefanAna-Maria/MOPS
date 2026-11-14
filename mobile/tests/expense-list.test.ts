@@ -4,6 +4,7 @@ import { amountToCents, dayLabel, documentSubtitle, formatLei, groupByDay } from
 function doc(id: string, date: string, total: string, extra: Partial<ExpenseDocument> = {}): ExpenseDocument {
   return {
     id,
+    context: "personal",
     type: "MANUAL",
     merchant: `Magazin ${id}`,
     date,

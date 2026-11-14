@@ -8,8 +8,9 @@ import { HOME_MESSAGES } from "@/lib/expense-messages";
 jest.mock("@/lib/api", () => ({ apiFetch: jest.fn() }));
 jest.mock("@/components/context-switcher", () => ({ ContextSwitcher: () => null }));
 jest.mock("@/components/account-menu", () => ({ AccountMenu: () => null }));
+const mockProfile = { activeContext: "personal" as "personal" | "company" };
 jest.mock("@/lib/profile-context", () => ({
-  useProfile: () => ({ profile: { firstName: "Ana", lastName: "Popescu" } }),
+  useProfile: () => ({ profile: { firstName: "Ana", lastName: "Popescu" }, activeContext: mockProfile.activeContext }),
 }));
 
 const apiFetchMock = apiFetch as unknown as jest.Mock;
@@ -17,6 +18,7 @@ const apiFetchMock = apiFetch as unknown as jest.Mock;
 function doc(id: string, merchant: string, date: string, total: string, category = "GROCERIES"): ExpenseDocument {
   return {
     id,
+    context: "personal",
     type: "MANUAL",
     merchant,
     date,
@@ -36,6 +38,7 @@ function respondWith(documents: ExpenseDocument[]) {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockProfile.activeContext = "personal";
   respondWith([]);
 });
 
@@ -71,7 +74,7 @@ describe("Acasă - cheltuielile lunii", () => {
   it("CA-04.1: loads this month's documents from the server", async () => {
     await render(<HomeScreen />);
 
-    expect(apiFetchMock).toHaveBeenCalledWith("/api/documents");
+    expect(apiFetchMock).toHaveBeenCalledWith("/api/documents?context=personal");
   });
 
   it("CA-04.1 / CA-04.2: groups the documents by day with each day's total", async () => {
@@ -141,5 +144,37 @@ describe("Acasă - deschiderea unui document", () => {
     await fireEvent.press(await screen.findByRole("button", { name: /^Piața Obor,/ }));
 
     expect(router.push).toHaveBeenCalledWith({ pathname: "/document/[id]", params: { id: "abc" } });
+  });
+});
+
+describe("Acasă - profilul personal și firma", () => {
+  it("loads only the company's documents when the company profile is selected", async () => {
+    mockProfile.activeContext = "company";
+
+    await render(<HomeScreen />);
+
+    expect(apiFetchMock).toHaveBeenCalledWith("/api/documents?context=company");
+    expect(apiFetchMock).not.toHaveBeenCalledWith("/api/documents?context=personal");
+  });
+
+  it("reloads the list for the other profile after switching, without showing the old one", async () => {
+    respondWith([doc("p", "Cumpărături personale", "2026-11-14", "10.00")]);
+    const view = await render(<HomeScreen />);
+    expect(await screen.findByText("Cumpărături personale")).toBeOnTheScreen();
+
+    let resolveCompany: (value: unknown) => void = () => {};
+    apiFetchMock.mockReturnValueOnce(new Promise((resolve) => (resolveCompany = resolve)));
+    mockProfile.activeContext = "company";
+    await view.rerender(<HomeScreen />);
+
+    expect(apiFetchMock).toHaveBeenLastCalledWith("/api/documents?context=company");
+    expect(screen.queryByText("Cumpărături personale")).toBeNull();
+
+    resolveCompany({
+      ok: true,
+      status: 200,
+      json: async () => ({ documents: [{ ...doc("c", "Consumabile birou", "2026-11-14", "20.00"), context: "company" }] }),
+    });
+    expect(await screen.findByText("Consumabile birou")).toBeOnTheScreen();
   });
 });

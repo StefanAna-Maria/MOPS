@@ -104,16 +104,17 @@ model Profile {
 }
 
 model Company {
-  id                 String   @id @default(cuid())
-  ownerId            String   @unique
-  owner              User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  id                 String     @id @default(cuid())
+  ownerId            String     @unique
+  owner              User       @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   cui                String
   name               String
   address            String
   registrationNumber String?
-  vatPayer           Boolean  @default(false)
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  vatPayer           Boolean    @default(false)
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+  documents          Document[]
 
   @@map("company")
 }
@@ -122,6 +123,9 @@ model Document {
   id              String         @id @default(cuid())
   userId          String
   user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // null = the personal profile; set = the user's company profile.
+  companyId       String?
+  company         Company?       @relation(fields: [companyId], references: [id], onDelete: Cascade)
   type            String
   merchant        String
   date            DateTime       @db.Date
@@ -136,7 +140,7 @@ model Document {
   updatedAt       DateTime       @updatedAt
 
   @@unique([userId, clientRequestId])
-  @@index([userId, date])
+  @@index([userId, companyId, date])
   @@map("document")
 }
 
