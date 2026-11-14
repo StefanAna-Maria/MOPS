@@ -4,7 +4,7 @@ import { APIError, createAuthMiddleware } from "better-auth/api";
 import { emailOTP } from "better-auth/plugins";
 import { expo } from "@better-auth/expo";
 import { prisma } from "./prisma.js";
-import { sendEmail, verificationEmail } from "./email.js";
+import { passwordResetEmail, sendEmail, verificationEmail } from "./email.js";
 import { USAGE_TYPES, isStrongPassword, isUsageType } from "@ocrinvoice/shared";
 
 export const auth = betterAuth({
@@ -15,6 +15,13 @@ export const auth = betterAuth({
     enabled: true,
     requireEmailVerification: true,
     minPasswordLength: 8,
+    // A new password closes the other sessions of the account (CA-02.14).
+    revokeSessionsOnPasswordReset: true,
+  },
+  session: {
+    // 60 days from the last use: the expiry is pushed forward at most once a day while the app is used.
+    expiresIn: 60 * 60 * 24 * 60,
+    updateAge: 60 * 60 * 24,
   },
   emailVerification: {
     sendOnSignIn: true,
@@ -46,19 +53,31 @@ export const auth = betterAuth({
         window: 60,
         max: 10,
       },
+      "/email-otp/request-password-reset": {
+        window: 60,
+        max: 5,
+      },
+      "/email-otp/reset-password": {
+        window: 60,
+        max: 10,
+      },
     },
   },
   hooks: {
     before: createAuthMiddleware(async (ctx) => {
-      if (ctx.path !== "/sign-up/email") {
+      if (ctx.path !== "/sign-up/email" && ctx.path !== "/email-otp/reset-password") {
         return;
       }
+      // Checked before the reset code is used, so a weak password does not burn the code.
       const password = ctx.body?.password;
       if (typeof password !== "string" || !isStrongPassword(password)) {
         throw new APIError("BAD_REQUEST", {
           code: "PASSWORD_TOO_WEAK",
           message: "Password must have at least 8 characters, one digit and one uppercase letter",
         });
+      }
+      if (ctx.path !== "/sign-up/email") {
+        return;
       }
       const usageType = ctx.body?.usageType;
       if (usageType !== undefined && !isUsageType(usageType)) {
@@ -82,6 +101,8 @@ export const auth = betterAuth({
         }
         if (type === "email-verification") {
           await sendEmail(verificationEmail(email, otp));
+        } else if (type === "forget-password") {
+          await sendEmail(passwordResetEmail(email, otp));
         }
       },
     }),

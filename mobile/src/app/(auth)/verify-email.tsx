@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Alert, Pressable, StyleSheet, Text } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 import { Screen } from "@/components/screen";
@@ -7,14 +7,9 @@ import { CODE_LENGTH, CodeInput } from "@/components/code-input";
 import { PrimaryButton } from "@/components/primary-button";
 import { TextLink } from "@/components/text-link";
 import { authClient } from "@/lib/auth-client";
+import { formatCountdown, useResendCountdown } from "@/lib/resend-countdown";
 import { showServerUnavailable, showTooManyAttempts } from "@/lib/alerts";
 import { colors, typography } from "@/constants/theme";
-
-const RESEND_COOLDOWN_SECONDS = 30;
-
-function formatCountdown(seconds: number) {
-  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
-}
 
 export default function VerifyEmailScreen() {
   const params = useLocalSearchParams<{ email?: string }>();
@@ -23,15 +18,7 @@ export default function VerifyEmailScreen() {
   const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
   const [resending, setResending] = useState(false);
-  const [secondsLeft, setSecondsLeft] = useState(RESEND_COOLDOWN_SECONDS);
-
-  useEffect(() => {
-    if (secondsLeft <= 0) {
-      return;
-    }
-    const timer = setTimeout(() => setSecondsLeft((seconds) => seconds - 1), 1000);
-    return () => clearTimeout(timer);
-  }, [secondsLeft]);
+  const { secondsLeft, restart } = useResendCountdown();
 
   async function handleVerify() {
     setLoading(true);
@@ -73,7 +60,7 @@ export default function VerifyEmailScreen() {
         return;
       }
       setCode("");
-      setSecondsLeft(RESEND_COOLDOWN_SECONDS);
+      restart();
     } catch {
       showServerUnavailable();
     } finally {

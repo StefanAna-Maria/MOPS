@@ -58,9 +58,17 @@ export function requestNewCode(email: string, ip?: string) {
   return send("POST", "/api/auth/email-otp/send-verification-otp", { email, type: "email-verification" }, { ip });
 }
 
+export function requestPasswordReset(email: string, ip?: string) {
+  return send("POST", "/api/auth/email-otp/request-password-reset", { email }, { ip });
+}
+
+export function resetPassword(email: string, otp: string, password: string, ip?: string) {
+  return send("POST", "/api/auth/email-otp/reset-password", { email, otp, password }, { ip });
+}
+
 // The database only holds a hash, so the code is read from the email that was "sent".
-export function lastCodeSentTo(email: string) {
-  const mail = sentEmails().findLast((message) => message.to === email);
+export function lastCodeSentTo(email: string, subject?: string) {
+  const mail = sentEmails().findLast((message) => message.to === email && (!subject || message.subject === subject));
   return mail?.text.match(/\b(\d{6})\b/)?.[1];
 }
 

@@ -45,6 +45,15 @@ export async function sendEmail(email: Email) {
   }
 }
 
+export function passwordResetEmail(to: string, otp: string): Email {
+  return {
+    to,
+    subject: "Resetează-ți parola",
+    text: `Codul tău pentru resetarea parolei este ${otp}. Expiră în 5 minute.\nDacă nu ai cerut tu resetarea, ignoră acest mesaj.`,
+    html: `<p>Codul tău pentru resetarea parolei este:</p><p style="font-size:28px;letter-spacing:6px"><b>${otp}</b></p><p>Expiră în 5 minute. Dacă nu ai cerut tu resetarea, ignoră acest mesaj.</p>`,
+  };
+}
+
 export function verificationEmail(to: string, otp: string): Email {
   return {
     to,

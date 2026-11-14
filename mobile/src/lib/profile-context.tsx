@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useState, type React
 import type { Company, MeResponse, Profile } from "@ocrinvoice/shared";
 import { authClient } from "./auth-client";
 import { apiFetch } from "./api";
+import { signOut } from "./sign-out";
 
 type MeData = {
   userId: string;
@@ -9,7 +10,7 @@ type MeData = {
   company: Company | null;
 };
 
-type MeResult = { status: "ok"; data: MeData } | { status: "error" };
+type MeResult = { status: "ok"; data: MeData } | { status: "unauthorized" } | { status: "error" };
 
 export type ActiveContext = "personal" | "company";
 
@@ -30,6 +31,9 @@ const ProfileContext = createContext<ProfileContextValue | null>(null);
 async function fetchMe(): Promise<MeResult> {
   try {
     const response = await apiFetch("/api/me");
+    if (response.status === 401) {
+      return { status: "unauthorized" };
+    }
     if (!response.ok) {
       return { status: "error" };
     }
@@ -62,7 +66,10 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
   const hasError = !!userId && errorUserId === userId;
 
   const applyResult = useCallback((result: MeResult, forUserId: string) => {
-    if (result.status === "error") {
+    if (result.status === "unauthorized") {
+      // The session was closed on the server (CA-02.10): clear the stored session and go back to sign-in.
+      signOut().catch(() => {});
+    } else if (result.status === "error") {
       setErrorUserId(forUserId);
     } else {
       setMe(result.data);
