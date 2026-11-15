@@ -1,5 +1,16 @@
 import { useEffect, useRef, useState } from "react";
-import { Alert, AppState, Image, Linking, Pressable, StyleSheet, Text, View } from "react-native";
+import {
+  Alert,
+  AppState,
+  Image,
+  Linking,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+  useWindowDimensions,
+  type LayoutChangeEvent,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router, useIsFocused } from "expo-router";
 import { CameraView, useCameraPermissions } from "expo-camera";
@@ -7,6 +18,14 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { AppLoader } from "@/components/app-loader";
 import { Card } from "@/components/card";
 import { PrimaryButton } from "@/components/primary-button";
+import {
+  DOCUMENT_FRAME_ASPECT_RATIO,
+  DOCUMENT_FRAME_MAX_WIDTH,
+  cropPhotoToDocumentFrame,
+  getDefaultDocumentFrameRect,
+  type Rect,
+  type Size,
+} from "@/lib/crop-frame";
 import { colors, radius, spacing, typography } from "@/constants/theme";
 
 const CORNER_SIZE = 28;
@@ -15,11 +34,17 @@ const CORNER_THICKNESS = 4;
 export default function ScanScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const isFocused = useIsFocused();
+  const windowDimensions = useWindowDimensions();
   const cameraRef = useRef<CameraView>(null);
 
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [isTakingPicture, setIsTakingPicture] = useState(false);
   const [isAppActive, setIsAppActive] = useState(AppState.currentState !== "background");
+
+  const [viewportSize, setViewportSize] = useState<Size | null>(null);
+  const [hudOffset, setHudOffset] = useState({ x: 0, y: 0 });
+  const [sectionOffset, setSectionOffset] = useState({ x: 0, y: 0 });
+  const [frameBox, setFrameBox] = useState<Rect | null>(null);
 
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (nextState) => {
@@ -29,6 +54,26 @@ export default function ScanScreen() {
       subscription.remove();
     };
   }, []);
+
+  function handleCameraRootLayout(event: LayoutChangeEvent) {
+    const { width, height } = event.nativeEvent.layout;
+    setViewportSize({ width, height });
+  }
+
+  function handleHudLayout(event: LayoutChangeEvent) {
+    const { x, y } = event.nativeEvent.layout;
+    setHudOffset({ x, y });
+  }
+
+  function handleSectionLayout(event: LayoutChangeEvent) {
+    const { x, y } = event.nativeEvent.layout;
+    setSectionOffset({ x, y });
+  }
+
+  function handleFrameLayout(event: LayoutChangeEvent) {
+    const { x, y, width, height } = event.nativeEvent.layout;
+    setFrameBox({ x, y, width, height });
+  }
 
   if (!permission) {
     return <AppLoader />;
@@ -86,7 +131,31 @@ export default function ScanScreen() {
     try {
       const photo = await cameraRef.current.takePictureAsync({ quality: 0.85 });
       if (photo?.uri) {
-        setPhotoUri(photo.uri);
+        const activeViewport: Size =
+          viewportSize && viewportSize.width > 0 && viewportSize.height > 0
+            ? viewportSize
+            : { width: windowDimensions.width || 390, height: windowDimensions.height || 844 };
+
+        const activeFrameRect: Rect =
+          frameBox && frameBox.width > 0 && frameBox.height > 0
+            ? {
+                x: hudOffset.x + sectionOffset.x + frameBox.x,
+                y: hudOffset.y + sectionOffset.y + frameBox.y,
+                width: frameBox.width,
+                height: frameBox.height,
+              }
+            : getDefaultDocumentFrameRect(activeViewport);
+
+        const croppedUri = await cropPhotoToDocumentFrame(
+          {
+            uri: photo.uri,
+            width: photo.width ?? 0,
+            height: photo.height ?? 0,
+          },
+          activeViewport,
+          activeFrameRect,
+        );
+        setPhotoUri(croppedUri);
       }
     } catch {
       Alert.alert("Nu am putut realiza fotografia", "Încearcă din nou.");
@@ -122,13 +191,15 @@ export default function ScanScreen() {
         </View>
 
         <View style={styles.previewImageContainer}>
-          <Image
-            source={{ uri: photoUri }}
-            style={styles.previewImage}
-            resizeMode="contain"
-            accessibilityLabel="Poza documentului"
-            testID="captured-photo"
-          />
+          <View style={styles.previewFrame}>
+            <Image
+              source={{ uri: photoUri }}
+              style={styles.previewImage}
+              resizeMode="cover"
+              accessibilityLabel="Poza documentului"
+              testID="captured-photo"
+            />
+          </View>
         </View>
 
         <SafeAreaView edges={["bottom"]} style={styles.previewFooter}>
@@ -151,7 +222,7 @@ export default function ScanScreen() {
   const isCameraActive = isFocused && isAppActive;
 
   return (
-    <View style={styles.cameraRoot}>
+    <View style={styles.cameraRoot} onLayout={handleCameraRootLayout}>
       {isCameraActive ? (
         <CameraView
           ref={cameraRef}
@@ -163,7 +234,11 @@ export default function ScanScreen() {
         />
       ) : null}
 
-      <SafeAreaView style={styles.hudOverlay} edges={["top", "bottom", "left", "right"]}>
+      <SafeAreaView
+        style={styles.hudOverlay}
+        edges={["top", "bottom", "left", "right"]}
+        onLayout={handleHudLayout}
+      >
         <View style={styles.topBar}>
           <Pressable
             accessibilityRole="button"
@@ -179,9 +254,10 @@ export default function ScanScreen() {
           <View style={styles.topBarSpacer} />
         </View>
 
-        <View style={styles.viewfinderSection}>
+        <View style={styles.viewfinderSection} onLayout={handleSectionLayout}>
           <View
             style={styles.documentFrame}
+            onLayout={handleFrameLayout}
             accessibilityLabel="Chenarul documentului"
             testID="document-frame"
           >
@@ -298,8 +374,8 @@ const styles = StyleSheet.create({
   },
   documentFrame: {
     width: "100%",
-    maxWidth: 320,
-    aspectRatio: 0.68,
+    maxWidth: DOCUMENT_FRAME_MAX_WIDTH,
+    aspectRatio: DOCUMENT_FRAME_ASPECT_RATIO,
     borderRadius: radius.md,
     borderWidth: 1,
     borderColor: "rgba(255, 255, 255, 0.35)",
@@ -383,15 +459,24 @@ const styles = StyleSheet.create({
   },
   previewImageContainer: {
     flex: 1,
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: spacing.xl,
     paddingVertical: spacing.md,
     alignItems: "center",
     justifyContent: "center",
   },
+  previewFrame: {
+    width: "100%",
+    maxWidth: DOCUMENT_FRAME_MAX_WIDTH,
+    aspectRatio: DOCUMENT_FRAME_ASPECT_RATIO,
+    borderRadius: radius.md,
+    overflow: "hidden",
+    borderWidth: 2,
+    borderColor: colors.primary,
+    backgroundColor: colors.navy,
+  },
   previewImage: {
     width: "100%",
     height: "100%",
-    borderRadius: radius.base,
   },
   previewFooter: {
     backgroundColor: colors.surface,
@@ -416,4 +501,3 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 });
-
