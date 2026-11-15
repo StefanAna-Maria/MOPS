@@ -6,6 +6,7 @@ jest.mock("expo-router", () => {
   return {
     router: { push: jest.fn(), back: jest.fn(), replace: jest.fn() },
     useFocusEffect: (effect: () => void) => React.useEffect(() => effect(), [effect]),
+    useIsFocused: jest.fn(() => true),
     useLocalSearchParams: jest.fn(() => ({})),
     Link: ({ href, children, style }: { href: unknown; children: unknown; style: unknown }) =>
       React.createElement(Text, { accessibilityRole: "link", accessibilityHint: String(href), style }, children),

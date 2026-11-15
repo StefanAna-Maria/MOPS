@@ -1,6 +1,7 @@
-import { ActivityIndicator, SectionList, StyleSheet, Text, View } from "react-native";
-import { router } from "expo-router";
+import { ActivityIndicator, Pressable, SectionList, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { router } from "expo-router";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import { ContextSwitcher } from "@/components/context-switcher";
 import { AccountMenu } from "@/components/account-menu";
 import { PrimaryButton } from "@/components/primary-button";
@@ -11,7 +12,7 @@ import { localTodayIso } from "@/lib/dates";
 import { formatLei, groupByDay } from "@/lib/expense-list";
 import { HOME_MESSAGES } from "@/lib/expense-messages";
 import { useMonthDocuments, type MonthDocumentsState } from "@/lib/use-month-documents";
-import { colors, spacing, typography } from "@/constants/theme";
+import { colors, radius, spacing, typography } from "@/constants/theme";
 
 function ListState({ state, onRetry }: { state: MonthDocumentsState; onRetry: () => void }) {
   if (state.status === "loading") {
@@ -34,7 +35,7 @@ export default function HomeScreen() {
   const sections = state.status === "ok" ? groupByDay(state.documents, localTodayIso()) : [];
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={["top", "left", "right"]}>
+    <SafeAreaView style={styles.safeArea} edges={["top", "bottom", "left", "right"]}>
       <View style={styles.header}>
         <View style={styles.side}>
           <ContextSwitcher />
@@ -47,6 +48,7 @@ export default function HomeScreen() {
         </View>
       </View>
       <SectionList
+        style={styles.list}
         sections={sections}
         keyExtractor={(document) => document.id}
         stickySectionHeadersEnabled={false}
@@ -75,6 +77,16 @@ export default function HomeScreen() {
           />
         )}
       />
+      <View style={styles.fabContainer}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Fotografiază un bon"
+          onPress={() => router.push("/scan")}
+          style={({ pressed }) => [styles.scanFab, pressed && styles.scanFabPressed]}
+        >
+          <Ionicons name="camera-outline" size={26} color={colors.white} />
+        </Pressable>
+      </View>
     </SafeAreaView>
   );
 }
@@ -103,6 +115,9 @@ const styles = StyleSheet.create({
   brand: {
     ...typography.headlineSm,
     color: colors.primary,
+  },
+  list: {
+    flex: 1,
   },
   content: {
     paddingHorizontal: spacing.lg,
@@ -146,5 +161,21 @@ const styles = StyleSheet.create({
     ...typography.bodyMd,
     color: colors.textSecondary,
     textAlign: "center",
+  },
+  fabContainer: {
+    alignItems: "center",
+    paddingBottom: spacing.lg,
+  },
+  scanFab: {
+    width: 56,
+    height: 56,
+    borderRadius: radius.full,
+    backgroundColor: colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    boxShadow: "0 10px 15px -3px rgba(13, 148, 136, 0.35)",
+  },
+  scanFabPressed: {
+    backgroundColor: colors.primaryActive,
   },
 });

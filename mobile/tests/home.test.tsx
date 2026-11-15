@@ -64,6 +64,14 @@ describe("Acasă", () => {
 
     expect(screen.getByText("OCRInvoice")).toBeOnTheScreen();
   });
+
+  it("opens the camera scan screen when pressing Fotografiază un bon", async () => {
+    await render(<HomeScreen />);
+
+    await fireEvent.press(screen.getByRole("button", { name: "Fotografiază un bon" }));
+
+    expect(router.push).toHaveBeenCalledWith("/scan");
+  });
 });
 
 describe("Acasă - cheltuielile lunii", () => {
