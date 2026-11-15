@@ -4,6 +4,7 @@ import { prisma } from "./lib/prisma.js";
 import me from "./routes/me.js";
 import company from "./routes/company.js";
 import documents from "./routes/documents.js";
+import scans from "./routes/scans.js";
 
 const app = new Hono();
 
@@ -12,6 +13,7 @@ app.on(["POST", "GET"], "/api/auth/*", (c) => auth.handler(c.req.raw));
 app.route("/api/me", me);
 app.route("/api/company", company);
 app.route("/api/documents", documents);
+app.route("/api/scans", scans);
 
 app.get("/api/health", async (c) => {
   await prisma.$queryRaw`SELECT 1`;

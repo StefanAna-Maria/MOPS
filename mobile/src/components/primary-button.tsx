@@ -32,7 +32,17 @@ export function PrimaryButton({ title, onPress, disabled, loading, variant = "pr
       {loading ? (
         <ActivityIndicator color={textColor} />
       ) : (
-        <Text style={[styles.text, { color: textColor }]}>{title}</Text>
+        // Button labels stay on one line. Android's default "highQuality" line breaking can wrap the last word of a
+        // short label with a custom font (seen on "Înapoi la Acasă"); "simple" breaking and one line prevent it.
+        <Text
+          style={[styles.text, { color: textColor }]}
+          numberOfLines={1}
+          textBreakStrategy="simple"
+          adjustsFontSizeToFit
+          minimumFontScale={0.85}
+        >
+          {title}
+        </Text>
       )}
     </Pressable>
   );

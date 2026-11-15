@@ -25,6 +25,7 @@ model User {
   profile       Profile?
   company       Company?
   documents     Document[]
+  files         File[]
 
   usageType String @default("PERSONAL")
 
@@ -115,6 +116,7 @@ model Company {
   createdAt          DateTime   @default(now())
   updatedAt          DateTime   @updatedAt
   documents          Document[]
+  files              File[]
 
   @@map("company")
 }
@@ -155,4 +157,42 @@ model DocumentLine {
 
   @@index([documentId])
   @@map("document_line")
+}
+
+// US-09: a photo uploaded for automatic reading. The image itself is stored on disk (UPLOAD_DIR) under storageKey.
+model File {
+  id           String     @id @default(cuid())
+  userId       String
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // null = the personal profile; set = the user's company profile (same rule as document.companyId).
+  companyId    String?
+  company      Company?   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  originalName String
+  mimeType     String
+  size         Int
+  storageKey   String     @unique
+  uploadedAt   DateTime   @default(now())
+  ocrResult    OcrResult?
+
+  @@index([userId, uploadedAt])
+  @@map("file")
+}
+
+// US-09: the automatic reading of one file. status: PROCESSING | DONE | FAILED.
+model OcrResult {
+  id         String   @id @default(cuid())
+  fileId     String   @unique
+  file       File     @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  status     String
+  // The extracted values with a 0-1 confidence each, after the server's own checks.
+  result     Json?
+  // The model's answer exactly as received, kept for debugging and for improving the prompt.
+  rawOutput  String?
+  errorCode  String?
+  model      String?
+  durationMs Int?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("ocr_result")
 }

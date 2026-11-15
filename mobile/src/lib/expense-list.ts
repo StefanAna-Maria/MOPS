@@ -31,17 +31,22 @@ export type DaySection = {
 
 /** "12.50" → 1250. Amounts come from the server with exactly two decimals. */
 export function amountToCents(amount: string): number {
-  const [units, decimals = ""] = amount.split(".");
-  return Number(units) * 100 + Number(decimals.padEnd(2, "0").slice(0, 2));
+  // Discounts read from receipts are negative ("-3.20"): the sign applies to the decimals too.
+  const negative = amount.trim().startsWith("-");
+  const [units, decimals = ""] = amount.trim().replace(/^-/, "").split(".");
+  const cents = Number(units) * 100 + Number(decimals.padEnd(2, "0").slice(0, 2));
+  return negative ? -cents : cents;
 }
 
-/** 123450 → "1.234,50 lei" (Romanian format: dot for thousands, comma for decimals). */
+/** 123450 → "1.234,50 lei", -320 → "-3,20 lei" (Romanian format: dot for thousands, comma for decimals). */
 export function formatLei(cents: number): string {
-  const units = Math.floor(cents / 100)
+  const sign = cents < 0 ? "-" : "";
+  const abs = Math.abs(cents);
+  const units = Math.floor(abs / 100)
     .toString()
     .replace(/\B(?=(\d{3})+(?!\d))/g, ".");
-  const decimals = String(cents % 100).padStart(2, "0");
-  return `${units},${decimals} lei`;
+  const decimals = String(abs % 100).padStart(2, "0");
+  return `${sign}${units},${decimals} lei`;
 }
 
 function shiftDays(isoDate: string, days: number) {

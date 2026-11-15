@@ -6,6 +6,12 @@ import { useCameraPermissions } from "expo-camera";
 import { ImageManipulator } from "expo-image-manipulator";
 import ScanScreen from "@/app/(app)/scan";
 import { computeFrameCropRect } from "@/lib/crop-frame";
+import { uploadScan } from "@/lib/scan-upload";
+
+// US-09: "Continuă" uploads the photo; the upload itself is tested in scan-upload.test.ts.
+jest.mock("@/lib/scan-upload", () => ({ uploadScan: jest.fn() }));
+jest.mock("@/lib/profile-context", () => ({ useProfile: () => ({ activeContext: "personal" }) }));
+const mockUploadScan = uploadScan as unknown as jest.Mock;
 
 const mockTakePictureAsync = jest.fn();
 const mockCrop = jest.fn();
@@ -158,10 +164,29 @@ describe("Fotografierea unui document cu camera (US-08)", () => {
     expect(screen.getByTestId("camera-view")).toBeOnTheScreen();
     expect(screen.getByLabelText("Chenarul documentului")).toBeOnTheScreen();
 
+    mockUploadScan.mockResolvedValue({ id: "scan-1", status: "PROCESSING" });
     await fireEvent.press(screen.getByRole("button", { name: "Declanșator" }));
     await fireEvent.press(screen.getByRole("button", { name: "Continuă" }));
 
-    expect(router.back).toHaveBeenCalledTimes(1);
+    // US-09: Continuă uploads the cropped photo and opens the reading screen.
+    expect(mockUploadScan).toHaveBeenCalledWith("file:///cache/receipt-01-cropped.jpg", "personal");
+    expect(router.replace).toHaveBeenCalledWith({ pathname: "/scan-result/[id]", params: { id: "scan-1" } });
+  });
+
+  it("CA-09.1: shows an alert and keeps the photo when the upload fails", async () => {
+    mockUseCameraPermissions.mockReturnValue([
+      { granted: true, status: "granted", canAskAgain: true },
+      jest.fn(),
+    ]);
+    mockUploadScan.mockRejectedValue(new Error("Network request failed"));
+    await render(<ScanScreen />);
+
+    await fireEvent.press(screen.getByRole("button", { name: "Declanșator" }));
+    await fireEvent.press(screen.getByRole("button", { name: "Continuă" }));
+
+    expect(Alert.alert).toHaveBeenCalledWith("Nu am putut trimite poza", expect.any(String));
+    expect(router.replace).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("Poza documentului")).toBeOnTheScreen();
   });
 
   it("CA-08.2: computeFrameCropRect maps the viewfinder document frame coordinates to the captured image pixels", () => {

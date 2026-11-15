@@ -89,3 +89,13 @@ describe("groupByDay", () => {
     expect(groupByDay([], "2026-11-14")).toEqual([]);
   });
 });
+
+describe("negative amounts (discounts read from receipts)", () => {
+  it("converts and formats a discount correctly", () => {
+    expect(amountToCents("-3.20")).toBe(-320);
+    expect(amountToCents("-0.05")).toBe(-5);
+    expect(formatLei(-320)).toBe("-3,20 lei");
+    expect(formatLei(-123450)).toBe("-1.234,50 lei");
+    expect(formatLei(amountToCents("29.37") + amountToCents("-3.20"))).toBe("26,17 lei");
+  });
+});
