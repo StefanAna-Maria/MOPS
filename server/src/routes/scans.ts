@@ -5,6 +5,7 @@ import { prisma } from "../lib/prisma.js";
 import { requireSession, type SessionVariables } from "../lib/session.js";
 import { resolveContext } from "../lib/context.js";
 import { detectImageType, readUpload, saveUpload, storageKeyFor } from "../lib/uploads.js";
+import { isPdf, renderFirstPageAsPng } from "../lib/pdf-render.js";
 import { isScanPending, startScan } from "../lib/scan-processor.js";
 import { requestTimeZone } from "./documents.js";
 import {
@@ -55,6 +56,15 @@ function serializeScan(file: FileWithResult): Scan {
   };
 }
 
+/** The app (Expo's fetch) sends file names percent-encoded ("Factura%20nr%201.pdf"); this gives the real name back. */
+function readableName(name: string) {
+  try {
+    return decodeURIComponent(name);
+  } catch {
+    return name;
+  }
+}
+
 const withResult = { ocrResult: { select: { status: true, result: true, errorCode: true, updatedAt: true } } };
 
 // CA-09.1: the app uploads the photo (multipart/form-data: "file", optional "context"); the server stores it and
@@ -76,8 +86,18 @@ scans.post(
     }
     // The type is taken from the image's own bytes, not from what the phone declares (Expo's fetch, React Native
     // and browsers label uploads differently, and the label can be anything).
-    const bytes = new Uint8Array(await file.arrayBuffer());
-    const mimeType = detectImageType(bytes);
+    let bytes: Uint8Array = new Uint8Array(await file.arrayBuffer());
+    let mimeType = detectImageType(bytes);
+    // US-14 (CA-14.2): a PDF becomes a picture of its first page, so it is read exactly like a photo.
+    if (!mimeType && isPdf(bytes)) {
+      try {
+        bytes = renderFirstPageAsPng(bytes);
+        mimeType = "image/png";
+      } catch (error) {
+        console.warn("Could not read the uploaded PDF:", error instanceof Error ? error.message : error);
+        return c.json({ code: "UNREADABLE_PDF" }, 422);
+      }
+    }
     if (!mimeType) {
       return c.json({ code: "UNSUPPORTED_FILE_TYPE" }, 415);
     }
@@ -96,9 +116,9 @@ scans.post(
         id,
         userId: user.id,
         companyId: context.companyId,
-        originalName: (file.name || "receipt").slice(0, 200),
+        originalName: readableName(file.name || "receipt").slice(0, 200),
         mimeType,
-        size: file.size,
+        size: bytes.length,
         storageKey,
         ocrResult: { create: { status: "PROCESSING" } },
       },

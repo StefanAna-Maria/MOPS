@@ -34,3 +34,18 @@ export const SCAN_MESSAGES = {
   uploadFailedTitle: "Nu am putut trimite poza",
   uploadFailed: "Verifică conexiunea și încearcă din nou.",
 };
+
+// US-14: importing a picture or a PDF that is already on the phone.
+export const IMPORT_MESSAGES = {
+  gallery: "Din galerie",
+  files: "Din fișiere",
+  failedTitle: "Nu am putut trimite documentul",
+  failed: "Verifică conexiunea și încearcă din nou.",
+  failedReasons: {
+    FILE_TOO_LARGE: "Fișierul este prea mare. Alege unul de cel mult 10 MB.",
+    UNREADABLE_PDF: "PDF-ul nu a putut fi deschis. Alege alt fișier.",
+    UNSUPPORTED_FILE_TYPE: "Alege o poză sau un PDF.",
+  } as Record<string, string>,
+  unsupportedTitle: "Fișier nepotrivit",
+  unsupported: "Alege o poză sau un PDF.",
+};
