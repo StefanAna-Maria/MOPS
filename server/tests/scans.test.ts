@@ -1,0 +1,304 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import app from "../src/index.js";
+import { prisma } from "../src/lib/prisma.js";
+import { OcrError, readReceipt } from "../src/lib/ocr-client.js";
+import { waitForScan } from "../src/lib/scan-processor.js";
+import { createSignedInUser, get, resetDatabase, send } from "./helpers.js";
+
+vi.mock("../src/lib/ocr-client.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../src/lib/ocr-client.js")>();
+  return { ...actual, readReceipt: vi.fn() };
+});
+
+const readReceiptMock = vi.mocked(readReceipt);
+
+// The smallest valid JPEG header is enough: the OCR service is replaced by the mock above.
+const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0xff, 0xd9]);
+
+const CARREFOUR_ANSWER = JSON.stringify({
+  merchant: { value: "Carrefour express", confidence: 0.98 },
+  date: { value: "2026-11-12", confidence: 0.98 },
+  time: { value: "17:58", confidence: 0.98 },
+  total: { value: 26.17, confidence: 0.98 },
+  paymentMethod: { value: "CARD", confidence: 0.98 },
+  items: [
+    { name: { value: "PARTY MIX", confidence: 0.95 }, quantity: { value: 2, confidence: 0.95 }, amount: { value: 29.37, confidence: 0.95 }, category: { value: "GROCERIES", confidence: 0.95 } },
+    { name: { value: "DISCOUNT", confidence: 0.95 }, quantity: { value: 1, confidence: 0.95 }, amount: { value: -3.2, confidence: 0.95 }, category: { value: "GROCERIES", confidence: 0.95 } },
+  ],
+});
+
+function upload(
+  cookie: string | undefined,
+  options: { bytes?: Uint8Array; type?: string; name?: string; context?: string; omitFile?: boolean } = {},
+) {
+  const form = new FormData();
+  if (!options.omitFile) {
+    form.append(
+      "file",
+      new File([options.bytes ?? JPEG], options.name ?? "receipt.jpg", { type: options.type ?? "image/jpeg" }),
+    );
+  }
+  if (options.context) {
+    form.append("context", options.context);
+  }
+  return app.request("/api/scans", {
+    method: "POST",
+    headers: { Origin: "http://localhost:3000", "X-Time-Zone": "Europe/Bucharest", ...(cookie ? { Cookie: cookie } : {}) },
+    body: form,
+  });
+}
+
+async function uploadAndRead(cookie: string, options: Parameters<typeof upload>[1] = {}) {
+  const response = await upload(cookie, options);
+  const { scan } = await response.json();
+  await waitForScan(scan.id);
+  const after = await (await get(`/api/scans/${scan.id}`, { cookie })).json();
+  return { uploadResponse: response, uploaded: scan, scan: after.scan };
+}
+
+/**
+ * An OCR answer the test releases when it wants. Readings run one at a time, so one that never finished would block
+ * every later test: afterEach releases whatever is still waiting.
+ */
+const pendingAnswers: (() => void)[] = [];
+
+function slowOcr() {
+  let release: () => void = () => {};
+  const answer = new Promise<Awaited<ReturnType<typeof readReceipt>>>((resolve) => {
+    release = () => resolve({ raw: CARREFOUR_ANSWER, model: "qwen3-vl-4b", durationMs: 31000 });
+  });
+  pendingAnswers.push(release);
+  return { answer, release };
+}
+
+beforeEach(async () => {
+  await resetDatabase();
+  readReceiptMock.mockReset();
+  readReceiptMock.mockResolvedValue({ raw: CARREFOUR_ANSWER, model: "qwen3-vl-4b", durationMs: 31000 });
+});
+
+afterEach(async () => {
+  pendingAnswers.splice(0).forEach((release) => release());
+  await new Promise((resolve) => setTimeout(resolve, 50));
+});
+
+describe("POST /api/scans", () => {
+  it("returns 401 without a session", async () => {
+    expect((await upload(undefined)).status).toBe(401);
+  });
+
+  it("CA-09.1: stores the photo and answers at once with PROCESSING", async () => {
+    const { answer } = slowOcr();
+    readReceiptMock.mockImplementation(() => answer);
+    const { cookie } = await createSignedInUser();
+
+    const response = await upload(cookie, { context: "personal" });
+
+    expect(response.status).toBe(202);
+    const { scan } = await response.json();
+    expect(scan).toMatchObject({ status: "PROCESSING", context: "personal", reading: null, errorCode: null });
+    const file = await prisma.file.findUniqueOrThrow({ where: { id: scan.id } });
+    expect(file).toMatchObject({ mimeType: "image/jpeg", size: JPEG.length, originalName: "receipt.jpg" });
+  });
+
+  it("CA-09.1: sends the uploaded photo to the OCR service", async () => {
+    const { cookie } = await createSignedInUser();
+
+    await uploadAndRead(cookie);
+
+    expect(readReceiptMock).toHaveBeenCalledTimes(1);
+    const [bytes, mimeType] = readReceiptMock.mock.calls[0];
+    expect(Array.from(bytes)).toEqual(Array.from(JPEG));
+    expect(mimeType).toBe("image/jpeg");
+  });
+
+  it.each([
+    ["no file", { omitFile: true }, 400, "FILE_REQUIRED"],
+    ["a PDF", { bytes: new TextEncoder().encode("%PDF-1.7 ..."), type: "application/pdf", name: "bon.pdf" }, 415, "UNSUPPORTED_FILE_TYPE"],
+    ["text pretending to be a JPEG", { bytes: new TextEncoder().encode("not an image"), type: "image/jpeg" }, 415, "UNSUPPORTED_FILE_TYPE"],
+    ["an empty file", { bytes: new Uint8Array() }, 413, "FILE_TOO_LARGE"],
+    ["a file over 10 MB", { bytes: new Uint8Array(10 * 1024 * 1024 + 1) }, 413, "FILE_TOO_LARGE"],
+  ])("refuses %s", async (_case, options, status, code) => {
+    const { cookie } = await createSignedInUser();
+
+    const response = await upload(cookie, options);
+
+    expect(response.status).toBe(status);
+    expect((await response.json()).code).toBe(code);
+    expect(await prisma.file.count()).toBe(0);
+    expect(readReceiptMock).not.toHaveBeenCalled();
+  });
+
+  it("saves the scan in the company profile, and refuses it for a user without a company", async () => {
+    const withCompany = await createSignedInUser();
+    await send("POST", "/api/company", { cui: "RO 14399840", name: "Exemplu SRL", address: "Str. 1" }, {
+      cookie: withCompany.cookie,
+    });
+    const withoutCompany = await createSignedInUser();
+
+    const saved = await upload(withCompany.cookie, { context: "company" });
+    const refused = await upload(withoutCompany.cookie, { context: "company" });
+
+    expect((await saved.json()).scan.context).toBe("company");
+    expect(refused.status).toBe(404);
+    expect((await refused.json()).code).toBe("COMPANY_NOT_FOUND");
+  });
+
+  it("identifies the image from its bytes, whatever type the phone declares", async () => {
+    const { cookie } = await createSignedInUser();
+
+    const response = await upload(cookie, { type: "application/octet-stream", name: "a1b2c3.jpg" });
+
+    expect(response.status).toBe(202);
+    const { scan } = await response.json();
+    const file = await prisma.file.findUniqueOrThrow({ where: { id: scan.id } });
+    expect(file.mimeType).toBe("image/jpeg");
+    expect(file.storageKey).toMatch(/\.jpg$/);
+  });
+});
+
+describe("GET /api/scans/:id", () => {
+  it("CA-09.2: returns the values read, each with a confidence, once the reading is DONE", async () => {
+    const { cookie } = await createSignedInUser();
+
+    const { scan } = await uploadAndRead(cookie);
+
+    expect(scan.status).toBe("DONE");
+    expect(scan.errorCode).toBeNull();
+    expect(scan.reading).toMatchObject({
+      merchant: { value: "Carrefour express", confidence: 0.98 },
+      date: { value: "2026-11-12", confidence: 0.98 },
+      time: { value: "17:58", confidence: 0.98 },
+      total: { value: "26.17", confidence: 0.98 },
+      paymentMethod: { value: "CARD", confidence: 0.98 },
+      itemsTotal: "26.17",
+      totalMatches: true,
+    });
+    expect(scan.reading.items[1]).toEqual({
+      name: { value: "DISCOUNT", confidence: 0.95 },
+      quantity: { value: 1, confidence: 0.95 },
+      amount: { value: "-3.20", confidence: 0.95 },
+      category: { value: "GROCERIES", confidence: 0.95 },
+    });
+  });
+
+  it("keeps the model's raw answer, the model name and the duration", async () => {
+    const { cookie } = await createSignedInUser();
+
+    const { scan } = await uploadAndRead(cookie);
+
+    const stored = await prisma.ocrResult.findUniqueOrThrow({ where: { fileId: scan.id } });
+    expect(stored).toMatchObject({ rawOutput: CARREFOUR_ANSWER, model: "qwen3-vl-4b", durationMs: 31000 });
+  });
+
+  it.each([
+    ["the OCR service is not running", new OcrError("OCR_UNAVAILABLE", "down"), "OCR_UNAVAILABLE"],
+    ["the OCR service is too slow", new OcrError("OCR_TIMEOUT", "slow"), "OCR_TIMEOUT"],
+    ["something unexpected happens", new Error("boom"), "OCR_UNAVAILABLE"],
+  ])("CA-10.2: is FAILED with a code when %s", async (_case, error, code) => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    readReceiptMock.mockRejectedValue(error);
+    const { cookie } = await createSignedInUser();
+
+    const { scan } = await uploadAndRead(cookie);
+
+    expect(scan).toMatchObject({ status: "FAILED", errorCode: code, reading: null });
+  });
+
+  it("CA-10.2: is FAILED with UNREADABLE when the photo is not a receipt", async () => {
+    readReceiptMock.mockResolvedValue({ raw: "Nu văd niciun bon în imagine.", model: null, durationMs: 5000 });
+    const { cookie } = await createSignedInUser();
+
+    const { scan } = await uploadAndRead(cookie);
+
+    expect(scan).toMatchObject({ status: "FAILED", errorCode: "UNREADABLE" });
+    const stored = await prisma.ocrResult.findUniqueOrThrow({ where: { fileId: scan.id } });
+    expect(stored.rawOutput).toBe("Nu văd niciun bon în imagine.");
+  });
+
+  it("counts a reading interrupted by a server restart as failed", async () => {
+    const { cookie, email } = await createSignedInUser();
+    const user = await prisma.user.findUniqueOrThrow({ where: { email } });
+    // A reading left PROCESSING by a previous server process: this one never queued it.
+    const orphan = await prisma.file.create({
+      data: {
+        userId: user.id,
+        originalName: "receipt.jpg",
+        mimeType: "image/jpeg",
+        size: 1,
+        storageKey: `${user.id}/orphan.jpg`,
+        uploadedAt: new Date(Date.now() - 5 * 60 * 1000),
+        ocrResult: { create: { status: "PROCESSING" } },
+      },
+    });
+
+    const after = await (await get(`/api/scans/${orphan.id}`, { cookie })).json();
+
+    expect(after.scan).toMatchObject({ status: "FAILED", errorCode: "OCR_TIMEOUT" });
+  });
+
+  it("keeps a reading that is still waiting in the queue as PROCESSING, however long it waits", async () => {
+    const { answer } = slowOcr();
+    readReceiptMock.mockImplementation(() => answer);
+    const { cookie } = await createSignedInUser();
+    const { scan } = await (await upload(cookie)).json();
+    await prisma.file.update({ where: { id: scan.id }, data: { uploadedAt: new Date(Date.now() - 60 * 60 * 1000) } });
+
+    const after = await (await get(`/api/scans/${scan.id}`, { cookie })).json();
+
+    expect(after.scan.status).toBe("PROCESSING");
+  });
+
+  it("sends the readings to the OCR service one at a time, never together", async () => {
+    const first = slowOcr();
+    const second = slowOcr();
+    readReceiptMock.mockImplementationOnce(() => first.answer).mockImplementationOnce(() => second.answer);
+    const { cookie } = await createSignedInUser();
+
+    const a = (await (await upload(cookie)).json()).scan;
+    const b = (await (await upload(cookie)).json()).scan;
+    await new Promise((resolve) => setTimeout(resolve, 200));
+
+    // The second photo waits while the first one is being read.
+    expect(readReceiptMock).toHaveBeenCalledTimes(1);
+
+    first.release();
+    await waitForScan(a.id);
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    expect(readReceiptMock).toHaveBeenCalledTimes(2);
+
+    second.release();
+    await waitForScan(b.id);
+    const done = await (await get(`/api/scans/${b.id}`, { cookie })).json();
+    expect(done.scan.status).toBe("DONE");
+  });
+
+  it("returns 404 for a missing scan and for another user's scan", async () => {
+    const owner = await createSignedInUser();
+    const { uploaded } = await uploadAndRead(owner.cookie);
+    const other = await createSignedInUser();
+
+    const missing = await get("/api/scans/does-not-exist", { cookie: owner.cookie });
+    const foreign = await get(`/api/scans/${uploaded.id}`, { cookie: other.cookie });
+
+    expect(missing.status).toBe(404);
+    expect(foreign.status).toBe(404);
+    expect((await foreign.json()).code).toBe("SCAN_NOT_FOUND");
+  });
+});
+
+describe("GET /api/scans/:id/image", () => {
+  it("returns the uploaded photo to its owner only", async () => {
+    const owner = await createSignedInUser();
+    const { uploaded } = await uploadAndRead(owner.cookie);
+    const other = await createSignedInUser();
+
+    const mine = await get(`/api/scans/${uploaded.id}/image`, { cookie: owner.cookie });
+    const foreign = await get(`/api/scans/${uploaded.id}/image`, { cookie: other.cookie });
+
+    expect(mine.status).toBe(200);
+    expect(mine.headers.get("Content-Type")).toBe("image/jpeg");
+    expect(Array.from(new Uint8Array(await mine.arrayBuffer()))).toEqual(Array.from(JPEG));
+    expect(foreign.status).toBe(404);
+  });
+});

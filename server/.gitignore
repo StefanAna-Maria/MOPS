@@ -33,3 +33,6 @@ lerna-debug.log*
 /src/generated/prisma
 src/generated/
 .neon
+
+# US-09: uploaded receipt photos (UPLOAD_DIR)
+uploads/

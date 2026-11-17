@@ -33,3 +33,27 @@ export type MeResponse = {
   profile: Profile;
   company: Company | null;
 };
+
+export type DocumentLine = {
+  id: string;
+  position: number;
+  name: string;
+  amount: string;
+  category: string;
+};
+
+export type ExpenseDocument = {
+  id: string;
+  /** "personal", or "company" for a document of the user's company. */
+  context: "personal" | "company";
+  type: string;
+  merchant: string;
+  date: string;
+  time: string | null;
+  total: string;
+  category: string;
+  paymentMethod: string;
+  note: string | null;
+  createdAt: string;
+  lines: DocumentLine[];
+};

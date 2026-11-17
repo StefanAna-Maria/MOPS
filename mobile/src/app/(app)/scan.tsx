@@ -26,6 +26,9 @@ import {
   type Rect,
   type Size,
 } from "@/lib/crop-frame";
+import { SCAN_MESSAGES } from "@/lib/expense-messages";
+import { useProfile } from "@/lib/profile-context";
+import { uploadScan } from "@/lib/scan-upload";
 import { colors, radius, spacing, typography } from "@/constants/theme";
 
 const CORNER_SIZE = 28;
@@ -37,8 +40,10 @@ export default function ScanScreen() {
   const windowDimensions = useWindowDimensions();
   const cameraRef = useRef<CameraView>(null);
 
+  const { activeContext } = useProfile();
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [isTakingPicture, setIsTakingPicture] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const [isAppActive, setIsAppActive] = useState(AppState.currentState !== "background");
 
   const [viewportSize, setViewportSize] = useState<Size | null>(null);
@@ -168,8 +173,22 @@ export default function ScanScreen() {
     setPhotoUri(null);
   }
 
-  function handleContinue() {
-    router.back();
+  // US-09 (CA-09.1): upload the photo; the server reads it in the background and the next screen waits for it.
+  async function handleContinue() {
+    if (!photoUri || isUploading) {
+      return;
+    }
+    setIsUploading(true);
+    try {
+      const scan = await uploadScan(photoUri, activeContext);
+      router.replace({ pathname: "/scan-result/[id]", params: { id: scan.id } });
+    } catch (error) {
+      // Visible in the Expo/Metro log: tells a refused upload (its server code) from a network or image error.
+      console.warn("Scan upload failed:", error instanceof Error ? `${error.name}: ${error.message}` : error);
+      Alert.alert(SCAN_MESSAGES.uploadFailedTitle, SCAN_MESSAGES.uploadFailed);
+    } finally {
+      setIsUploading(false);
+    }
   }
 
   if (photoUri) {
@@ -208,10 +227,10 @@ export default function ScanScreen() {
           </Text>
           <View style={styles.previewActions}>
             <View style={styles.actionItem}>
-              <PrimaryButton title="Refă poza" variant="outline" onPress={handleRetake} />
+              <PrimaryButton title="Refă poza" variant="outline" onPress={handleRetake} disabled={isUploading} />
             </View>
             <View style={styles.actionItem}>
-              <PrimaryButton title="Continuă" onPress={handleContinue} />
+              <PrimaryButton title="Continuă" onPress={handleContinue} loading={isUploading} />
             </View>
           </View>
         </SafeAreaView>
