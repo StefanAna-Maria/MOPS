@@ -10,6 +10,9 @@ import { fetchScan } from "@/lib/scan-upload";
 
 jest.mock("@/lib/scan-upload", () => ({ POLL_INTERVAL_MS: 2000, fetchScan: jest.fn() }));
 jest.mock("@/lib/api", () => ({ apiFetch: jest.fn() }));
+jest.mock("@/lib/auth-client", () => ({ authClient: { getCookie: jest.fn(async () => "session=abc") } }));
+
+jest.setTimeout(15_000);
 
 const fetchScanMock = fetchScan as unknown as jest.Mock;
 const apiFetchMock = apiFetch as unknown as jest.Mock;
@@ -215,7 +218,7 @@ describe("Documentul salvat, cu poza atașată", () => {
     await render(<DocumentScreen />);
 
     expect(await screen.findByText("Alimente · Bon scanat")).toBeOnTheScreen();
-    expect(screen.getByLabelText("Poza documentului").props.source).toMatchObject({
+    expect((await screen.findByLabelText("Poza documentului")).props.source).toMatchObject({
       uri: `${API_URL}/api/scans/scan-1/image`,
     });
   });

@@ -1,95 +1,22 @@
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Platform, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
-import {
-  EXPENSE_CATEGORY_LABELS,
-  LOW_CONFIDENCE,
-  PAYMENT_METHOD_LABELS,
-  formatDisplayDate,
-  type OcrField,
-  type OcrReading,
-  type Scan,
-  type ScanErrorCode,
-} from "@ocrinvoice/shared";
+import type { OcrReading, Scan, ScanErrorCode } from "@ocrinvoice/shared";
 import { PrimaryButton } from "@/components/primary-button";
-import { amountToCents, formatLei } from "@/lib/expense-list";
+import { ScanReview } from "@/components/scan-review";
 import { SCAN_MESSAGES } from "@/lib/expense-messages";
 import { POLL_INTERVAL_MS, fetchScan } from "@/lib/scan-upload";
-import { colors, elevation, radius, spacing, typography } from "@/constants/theme";
+import { colors, spacing, typography } from "@/constants/theme";
 
 type ScreenState =
   | { status: "processing"; elapsedSeconds: number }
   | { status: "done"; reading: OcrReading }
   | { status: "failed"; errorCode: ScanErrorCode | "NOT_FOUND" | "NETWORK" };
 
-function percent(confidence: number) {
-  return `${Math.round(confidence * 100)}%`;
-}
-
-function ReadValue<T>({ label, field, format }: { label: string; field: OcrField<T>; format: (value: T) => string }) {
-  const low = field.confidence < LOW_CONFIDENCE;
-  return (
-    <View style={styles.row}>
-      <Text style={styles.rowLabel}>{label}</Text>
-      <View style={styles.rowRight}>
-        <Text style={styles.rowValue}>{field.value === null ? "—" : format(field.value)}</Text>
-        <Text
-          style={[styles.confidence, low && styles.confidenceLow]}
-          accessibilityLabel={`Siguranță ${percent(field.confidence)}`}
-        >
-          {percent(field.confidence)}
-        </Text>
-      </View>
-    </View>
-  );
-}
-
-function ReadingView({ reading }: { reading: OcrReading }) {
-  const lei = (amount: string) => formatLei(amountToCents(amount));
-  return (
-    <>
-      <View style={styles.card}>
-        <ReadValue label="Magazin" field={reading.merchant} format={(v) => v} />
-        <ReadValue label="Data" field={reading.date} format={formatDisplayDate} />
-        <ReadValue label="Ora" field={reading.time} format={(v) => v} />
-        <ReadValue label="Total" field={reading.total} format={lei} />
-        <ReadValue label="Plată" field={reading.paymentMethod} format={(v) => PAYMENT_METHOD_LABELS[v]} />
-      </View>
-
-      <Text style={styles.sectionTitle}>PRODUSE</Text>
-      <View style={styles.card}>
-        {reading.items.length === 0 ? <Text style={styles.empty}>Niciun produs găsit.</Text> : null}
-        {reading.items.map((item, index) => (
-          <View key={index} style={[styles.item, index > 0 && styles.itemDivider]}>
-            <View style={styles.itemTexts}>
-              <Text style={styles.itemName}>{item.name.value}</Text>
-              <Text style={styles.itemMeta}>
-                {item.quantity.value ?? 1} × {item.category.value ? EXPENSE_CATEGORY_LABELS[item.category.value] : "—"}
-              </Text>
-            </View>
-            <View style={styles.itemRight}>
-              <Text style={styles.itemAmount}>{item.amount.value === null ? "—" : lei(item.amount.value)}</Text>
-              <Text style={[styles.confidence, item.amount.confidence < LOW_CONFIDENCE && styles.confidenceLow]}>
-                {percent(item.amount.confidence)}
-              </Text>
-            </View>
-          </View>
-        ))}
-      </View>
-
-      <Text style={[styles.check, reading.totalMatches ? styles.checkOk : styles.checkWarn]}>
-        {reading.totalMatches
-          ? SCAN_MESSAGES.totalMatches
-          : `${SCAN_MESSAGES.totalDiffers} (${lei(reading.itemsTotal)}).`}
-      </Text>
-    </>
-  );
-}
-
 /**
- * US-09: waits for the server to read the uploaded photo and shows what was read, with the confidence of each value.
- * US-10 (progress stages and errors) and US-11 (checking and saving) build on this screen.
+ * US-09: waits for the server to read the uploaded photo. Once it is read, US-11 lets the user check the values and
+ * save the document. US-10 (progress stages and errors) builds on this screen.
  */
 export default function ScanResultScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -158,7 +85,7 @@ export default function ScanResultScreen() {
           </View>
         ) : null}
 
-        {state.status === "done" ? <ReadingView reading={state.reading} /> : null}
+        {state.status === "done" ? <ScanReview scanId={scanId} reading={state.reading} /> : null}
 
         <PrimaryButton title={SCAN_MESSAGES.home} variant="outline" onPress={() => router.replace("/")} />
       </ScrollView>
@@ -197,94 +124,5 @@ const styles = StyleSheet.create({
     ...typography.headlineSm,
     textAlign: "center",
     color: colors.error,
-  },
-  card: {
-    ...elevation.level1,
-    borderRadius: radius.base,
-    paddingHorizontal: spacing.lg,
-  },
-  row: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    gap: spacing.lg,
-    paddingVertical: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  rowLabel: {
-    ...typography.bodyMd,
-    color: colors.textSecondary,
-  },
-  rowRight: {
-    flexDirection: "row",
-    alignItems: "baseline",
-    gap: spacing.sm,
-    flexShrink: 1,
-  },
-  rowValue: {
-    ...typography.label,
-    flexShrink: 1,
-    textAlign: "right",
-    color: colors.textPrimary,
-  },
-  confidence: {
-    fontFamily: Platform.select({ ios: "Menlo", default: "monospace" }),
-    fontSize: 11,
-    color: colors.successText,
-  },
-  confidenceLow: {
-    color: "#92400E",
-  },
-  sectionTitle: {
-    ...typography.label,
-    fontSize: 12,
-    letterSpacing: 0.6,
-    marginBottom: -spacing.sm,
-    color: colors.textSecondary,
-  },
-  empty: {
-    ...typography.bodyMd,
-    paddingVertical: spacing.md,
-    color: colors.textSecondary,
-  },
-  item: {
-    flexDirection: "row",
-    gap: spacing.md,
-    paddingVertical: spacing.md,
-  },
-  itemDivider: {
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
-  itemTexts: {
-    flex: 1,
-    gap: 2,
-  },
-  itemName: {
-    ...typography.bodyMd,
-    color: colors.textPrimary,
-  },
-  itemMeta: {
-    ...typography.bodySm,
-    color: colors.textSecondary,
-  },
-  itemRight: {
-    alignItems: "flex-end",
-    gap: 2,
-  },
-  itemAmount: {
-    ...typography.label,
-    color: colors.textPrimary,
-    fontVariant: ["tabular-nums"],
-  },
-  check: {
-    ...typography.bodyMd,
-    textAlign: "center",
-  },
-  checkOk: {
-    color: colors.successText,
-  },
-  checkWarn: {
-    color: "#92400E",
   },
 });

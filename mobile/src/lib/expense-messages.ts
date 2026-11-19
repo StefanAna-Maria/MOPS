@@ -29,10 +29,25 @@ export const SCAN_MESSAGES = {
   },
   retake: "Fotografiază din nou",
   home: "Înapoi la Acasă",
-  totalMatches: "Produsele se potrivesc cu totalul de pe bon.",
-  totalDiffers: "Produsele nu se potrivesc cu totalul de pe bon",
   uploadFailedTitle: "Nu am putut trimite poza",
   uploadFailed: "Verifică conexiunea și încearcă din nou.",
+};
+
+// US-11: checking the values read and saving the document.
+export const REVIEW_MESSAGES = {
+  verify: "Verifică",
+  corrected: "Corectat",
+  confirm: "E corect",
+  products: "PRODUSE",
+  addProduct: "Adaugă un produs",
+  deleteProduct: "Șterge",
+  itemsTotal: (amount: string) => `Suma produselor: ${amount}`,
+  totalMatches: "Se potrivește cu totalul de pe bon",
+  totalDiffers: (amount: string) => `Diferență de ${amount} față de total`,
+  save: "Salvează documentul",
+  saveFailedTitle: "Nu am putut salva documentul",
+  saveFailed: "Verifică datele și încearcă din nou.",
+  photo: "Poza documentului",
 };
 
 // US-14: importing a picture or a PDF that is already on the phone.

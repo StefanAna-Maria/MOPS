@@ -6,6 +6,7 @@ import { apiFetch } from "@/lib/api";
 import { DOCUMENT_MESSAGES, HOME_MESSAGES } from "@/lib/expense-messages";
 
 jest.mock("@/lib/api", () => ({ apiFetch: jest.fn() }));
+jest.mock("@/lib/auth-client", () => ({ authClient: { getCookie: jest.fn(async () => "session=abc") } }));
 
 const apiFetchMock = apiFetch as unknown as jest.Mock;
 const paramsMock = useLocalSearchParams as unknown as jest.Mock;

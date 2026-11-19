@@ -2,10 +2,11 @@ import { act, fireEvent, render, screen } from "@testing-library/react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import type { OcrReading, Scan } from "@ocrinvoice/shared";
 import ScanResultScreen from "@/app/(app)/scan-result/[id]";
-import { SCAN_MESSAGES } from "@/lib/expense-messages";
+import { REVIEW_MESSAGES, SCAN_MESSAGES } from "@/lib/expense-messages";
 import { fetchScan } from "@/lib/scan-upload";
 
 jest.mock("@/lib/scan-upload", () => ({ POLL_INTERVAL_MS: 2000, fetchScan: jest.fn() }));
+jest.mock("@/lib/api", () => ({ apiFetch: jest.fn() }));
 
 const fetchScanMock = fetchScan as unknown as jest.Mock;
 const paramsMock = useLocalSearchParams as unknown as jest.Mock;
@@ -78,29 +79,35 @@ describe("Citirea documentului", () => {
     });
 
     expect(fetchScanMock).toHaveBeenCalledTimes(2);
-    expect(await screen.findByText("Carrefour express")).toBeOnTheScreen();
-    expect(screen.getByText("12.11.2026")).toBeOnTheScreen();
-    expect(screen.getByText("17:58")).toBeOnTheScreen();
-    expect(screen.getByText("26,17 lei")).toBeOnTheScreen();
-    expect(screen.getByText("Card")).toBeOnTheScreen();
-    expect(screen.getByText("PARTY MIX MIXED 60G")).toBeOnTheScreen();
-    expect(screen.getByText("-3,20 lei")).toBeOnTheScreen();
-    expect(screen.getAllByText("98%").length).toBe(5);
-    expect(screen.getByText(SCAN_MESSAGES.totalMatches)).toBeOnTheScreen();
+    expect(await screen.findByDisplayValue("Carrefour express")).toBeOnTheScreen();
+    expect(screen.getByDisplayValue("12.11.2026")).toBeOnTheScreen();
+    expect(screen.getByDisplayValue("17:58")).toBeOnTheScreen();
+    expect(screen.getByDisplayValue("26,17")).toBeOnTheScreen();
+    expect(screen.getByRole("radio", { name: "Card" })).toBeChecked();
+    expect(screen.getByDisplayValue("PARTY MIX MIXED 60G")).toBeOnTheScreen();
+    expect(screen.getByDisplayValue("-3,20")).toBeOnTheScreen();
+    expect(screen.queryByText(REVIEW_MESSAGES.verify)).toBeNull();
+    expect(screen.getByText(REVIEW_MESSAGES.totalMatches)).toBeOnTheScreen();
   });
 
   it("CA-09.2: says when the products do not add up to the total", async () => {
     fetchScanMock.mockResolvedValue(
       scan({
         status: "DONE",
-        reading: { ...reading, itemsTotal: "29.37", totalMatches: false, total: { value: "26.17", confidence: 0.4 } },
+        reading: {
+          ...reading,
+          items: reading.items.slice(0, 1),
+          itemsTotal: "29.37",
+          totalMatches: false,
+          total: { value: "26.17", confidence: 0.4 },
+        },
       }),
     );
 
     await render(<ScanResultScreen />);
 
-    expect(await screen.findByText(`${SCAN_MESSAGES.totalDiffers} (29,37 lei).`)).toBeOnTheScreen();
-    expect(screen.getByText("40%")).toBeOnTheScreen();
+    expect(await screen.findByText(REVIEW_MESSAGES.totalDiffers("3,20 lei"))).toBeOnTheScreen();
+    expect(screen.getByLabelText(`Total: ${REVIEW_MESSAGES.verify}`)).toBeOnTheScreen();
   });
 
   it.each([

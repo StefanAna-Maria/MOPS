@@ -8,6 +8,7 @@ import {
   isPaymentMethod,
   type ExpenseDocument,
 } from "@ocrinvoice/shared";
+import { DocumentPhoto } from "@/components/document-photo";
 import { PrimaryButton } from "@/components/primary-button";
 import { apiFetch } from "@/lib/api";
 import { amountToCents, documentSubtitle, formatLei } from "@/lib/expense-list";
@@ -60,6 +61,8 @@ function DocumentDetail({ document }: { document: ExpenseDocument }) {
         <Text style={styles.subtitle}>{documentSubtitle(document)}</Text>
         <Text style={styles.total}>{formatLei(amountToCents(document.total))}</Text>
       </View>
+
+      {document.fileId ? <DocumentPhoto fileId={document.fileId} /> : null}
 
       <View style={styles.card}>
         <DetailRow label="Data" value={date} />
