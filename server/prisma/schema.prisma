@@ -137,6 +137,8 @@ model Document {
   paymentMethod   String
   note            String?
   clientRequestId String
+  fileId          String?        @unique
+  file            File?          @relation(fields: [fileId], references: [id], onDelete: SetNull)
   lines           DocumentLine[]
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
@@ -173,6 +175,7 @@ model File {
   storageKey   String     @unique
   uploadedAt   DateTime   @default(now())
   ocrResult    OcrResult?
+  document     Document?
 
   @@index([userId, uploadedAt])
   @@map("file")

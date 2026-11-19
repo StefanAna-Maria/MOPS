@@ -7,10 +7,12 @@ import { resolveContext } from "../lib/context.js";
 import { detectImageType, readUpload, saveUpload, storageKeyFor } from "../lib/uploads.js";
 import { isPdf, renderFirstPageAsPng } from "../lib/pdf-render.js";
 import { isScanPending, startScan } from "../lib/scan-processor.js";
-import { requestTimeZone } from "./documents.js";
+import { Prisma } from "../generated/prisma/client.js";
+import { documentWithLines, requestTimeZone, serializeDocument, utcDate } from "./documents.js";
 import {
   MAX_SCAN_FILE_BYTES,
   todayInTimeZone,
+  validateScannedDocument,
   type OcrReading,
   type Scan,
   type ScanErrorCode,
@@ -156,6 +158,69 @@ scans.get("/:id/image", async (c) => {
     "Content-Type": file.mimeType,
     "Cache-Control": "private, max-age=3600",
   });
+});
+
+// CA-11.3 / CA-11.4: saves the values checked by the user as a scanned document, with the photo attached. The
+// products must add up to the total. A photo becomes a single document: saving it again returns that document.
+scans.post("/:id/document", async (c) => {
+  const user = c.get("user");
+  const file = await prisma.file.findFirst({
+    where: { id: c.req.param("id"), userId: user.id },
+    include: { ocrResult: { select: { status: true } }, document: { include: documentWithLines } },
+  });
+  if (!file) {
+    return c.json({ code: "SCAN_NOT_FOUND" }, 404);
+  }
+  if (file.document) {
+    return c.json({ document: serializeDocument(file.document) }, 200);
+  }
+  if (file.ocrResult?.status !== "DONE") {
+    return c.json({ code: "SCAN_NOT_READY" }, 409);
+  }
+
+  const body = await c.req.json().catch(() => null);
+  const result = validateScannedDocument(body, todayInTimeZone(requestTimeZone(c.req.header("X-Time-Zone"))));
+  if (!result.ok) {
+    return c.json({ code: "INVALID_DOCUMENT", fields: result.fields }, 400);
+  }
+
+  const values = result.value;
+  try {
+    const created = await prisma.document.create({
+      data: {
+        userId: user.id,
+        companyId: file.companyId,
+        type: "SCANNED",
+        merchant: values.merchant,
+        date: utcDate(values.date),
+        time: values.time,
+        total: values.total,
+        category: values.category,
+        paymentMethod: values.paymentMethod,
+        note: null,
+        clientRequestId: `scan-${file.id}`,
+        fileId: file.id,
+        lines: {
+          create: values.items.map((item, index) => ({
+            position: index + 1,
+            name: item.name,
+            amount: item.amount,
+            category: item.category,
+          })),
+        },
+      },
+      include: documentWithLines,
+    });
+    return c.json({ document: serializeDocument(created) }, 201);
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      const saved = await prisma.document.findUnique({ where: { fileId: file.id }, include: documentWithLines });
+      if (saved) {
+        return c.json({ document: serializeDocument(saved) }, 200);
+      }
+    }
+    throw error;
+  }
 });
 
 export default scans;

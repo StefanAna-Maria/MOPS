@@ -27,6 +27,7 @@ function doc(id: string, merchant: string, date: string, total: string, category
     category,
     paymentMethod: "CASH",
     note: null,
+    fileId: null,
     createdAt: `${date}T10:00:00.000Z`,
     lines: [],
   };

@@ -54,6 +54,8 @@ export type ExpenseDocument = {
   category: string;
   paymentMethod: string;
   note: string | null;
+  /** The scanned photo (GET /api/scans/:fileId/image), or null for a manual expense. */
+  fileId: string | null;
   createdAt: string;
   lines: DocumentLine[];
 };

@@ -16,12 +16,16 @@ const documents = new Hono<{ Variables: SessionVariables }>();
 
 documents.use("*", requireSession);
 
-const documentWithLines = { lines: { orderBy: { position: "asc" } } } satisfies Prisma.DocumentInclude;
+export const documentWithLines = { lines: { orderBy: { position: "asc" } } } satisfies Prisma.DocumentInclude;
 
 type DocumentWithLines = Prisma.DocumentGetPayload<{ include: typeof documentWithLines }>;
 
 function toIsoDate(date: Date) {
   return date.toISOString().slice(0, 10);
+}
+
+export function utcDate(isoDate: string) {
+  return new Date(`${isoDate}T00:00:00.000Z`);
 }
 
 export function serializeDocument(document: DocumentWithLines): ExpenseDocument {
@@ -36,6 +40,7 @@ export function serializeDocument(document: DocumentWithLines): ExpenseDocument 
     category: document.category,
     paymentMethod: document.paymentMethod,
     note: document.note,
+    fileId: document.fileId,
     createdAt: document.createdAt.toISOString(),
     lines: document.lines.map((line) => ({
       id: line.id,
@@ -60,10 +65,6 @@ function findByRequestId(userId: string, clientRequestId: string) {
     where: { userId_clientRequestId: { userId, clientRequestId } },
     include: documentWithLines,
   });
-}
-
-function utcDate(isoDate: string) {
-  return new Date(`${isoDate}T00:00:00.000Z`);
 }
 
 
