@@ -14,6 +14,14 @@ export const HOME_MESSAGES = {
 
 export const DOCUMENT_MESSAGES = {
   notFound: "Documentul nu a fost găsit.",
+  delete: "Șterge documentul",
+  confirmTitle: "Ștergi documentul?",
+  confirmText: (summary: string) =>
+    `${summary} va dispărea din listă și din totaluri. Documentul nu poate fi recuperat.`,
+  confirm: "Șterge",
+  cancel: "Renunță",
+  deleteFailedTitle: "Nu am putut șterge documentul",
+  deleteFailed: "Încearcă din nou.",
 };
 
 export const SCAN_MESSAGES = {

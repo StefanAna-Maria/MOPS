@@ -102,6 +102,17 @@ documents.get("/:id", async (c) => {
   return c.json({ document: serializeDocument(document) });
 });
 
+// CA-07.1 / CA-07.2: deletes one of the signed-in user's documents with its lines, so it leaves the list and the
+// totals. Another user's document gets the same 404 as a missing one. A scanned photo stays stored (see US-12).
+documents.delete("/:id", async (c) => {
+  const user = c.get("user");
+  const { count } = await prisma.document.deleteMany({ where: { id: c.req.param("id"), userId: user.id } });
+  if (count === 0) {
+    return c.json({ code: "DOCUMENT_NOT_FOUND" }, 404);
+  }
+  return c.body(null, 204);
+});
+
 documents.post("/manual", async (c) => {
   const user = c.get("user");
   const body = await c.req.json().catch(() => null);
