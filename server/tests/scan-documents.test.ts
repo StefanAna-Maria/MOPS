@@ -29,7 +29,7 @@ function checkedValues(extra: Record<string, unknown> = {}) {
   return {
     merchant: "Carrefour Express",
     date: todayIso(),
-    time: "17:58",
+    time: "00:00",
     total: "26.17",
     paymentMethod: "CARD",
     category: "GROCERIES",
@@ -67,7 +67,7 @@ describe("POST /api/scans/:id/document", () => {
       type: "SCANNED",
       merchant: "Carrefour Express",
       date: todayIso(),
-      time: "17:58",
+      time: "00:00",
       total: "26.17",
       category: "GROCERIES",
       paymentMethod: "CARD",
@@ -124,6 +124,16 @@ describe("POST /api/scans/:id/document", () => {
 
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({ code: "INVALID_DOCUMENT", fields: ["merchant", "date"] });
+  });
+
+  it("refuses a time later than now on today's date", async () => {
+    const { email, cookie } = await createSignedInUser();
+    const scanId = await createScan(email);
+
+    const response = await save(scanId, checkedValues({ date: todayIso(), time: "23:59" }), cookie);
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ code: "INVALID_DOCUMENT", fields: ["time"] });
   });
 
   it("returns 404 for a missing scan and for another user's scan, and saves nothing", async () => {

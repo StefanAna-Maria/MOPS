@@ -21,10 +21,10 @@ export function parseLineAmount(input: string): string | null {
     return null;
   }
   const cents = Number(units) * 100 + Number(decimals);
-  if (cents === 0 || cents > MAX_AMOUNT_CENTS) {
+  if (cents > MAX_AMOUNT_CENTS) {
     return null;
   }
-  return `${match[1]}${units}.${decimals}`;
+  return cents === 0 ? "0.00" : `${match[1]}${units}.${decimals}`;
 }
 
 function toCents(amount: string) {
@@ -120,7 +120,11 @@ function readItem(raw: unknown): ScannedDocumentItem | null {
   return { name, amount, category: item.category };
 }
 
-export function validateScannedDocument(body: unknown, today: string): ScannedDocumentValidation {
+export function validateScannedDocument(
+  body: unknown,
+  today: string,
+  currentTime?: string,
+): ScannedDocumentValidation {
   const data = (typeof body === "object" && body !== null ? body : {}) as Record<string, unknown>;
   const fields: ScannedDocumentField[] = [];
 
@@ -135,7 +139,9 @@ export function validateScannedDocument(body: unknown, today: string): ScannedDo
   }
 
   const time = data.time === undefined || data.time === null ? null : data.time;
-  if (time !== null && (typeof time !== "string" || !/^([01]\d|2[0-3]):[0-5]\d$/.test(time))) {
+  const timeValid = time === null || (typeof time === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(time));
+  const timeInFuture = timeValid && time !== null && date === today && currentTime !== undefined && time > currentTime;
+  if (!timeValid || timeInFuture) {
     fields.push("time");
   }
 

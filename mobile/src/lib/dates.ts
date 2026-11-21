@@ -5,6 +5,11 @@ export function localTodayIso(now: Date = new Date()) {
   return `${now.getFullYear()}-${month}-${day}`;
 }
 
+/** The phone's time as "14:05". */
+export function localTimeNow(now: Date = new Date()) {
+  return `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+}
+
 /** The phone's time zone, e.g. "Europe/Bucharest", sent to the server in X-Time-Zone. */
 export function deviceTimeZone() {
   try {

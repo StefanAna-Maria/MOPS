@@ -128,10 +128,67 @@ export function toDocumentBody(review: Review) {
   };
 }
 
-export function canSave(review: Review, today: string): boolean {
+export function isFutureDate(review: Review, today: string): boolean {
+  const date = parseDisplayDate(review.date.value);
+  return date !== null && date > today;
+}
+
+export function isFutureTime(review: Review, today: string, currentTime: string): boolean {
+  const time = review.time.value.trim();
+  return parseDisplayDate(review.date.value) === today && /^\d{2}:\d{2}$/.test(time) && time > currentTime;
+}
+
+const FIELD_LABELS: Record<string, string> = {
+  merchant: "Magazin",
+  date: "Data",
+  time: "Ora",
+  total: "Total",
+  paymentMethod: "Plată",
+  category: "Categorie",
+  items: "Produse",
+};
+
+export type SaveBlocker =
+  | { kind: "toCheck"; count: number }
+  | { kind: "noProducts" }
+  | { kind: "amount" }
+  | { kind: "total" }
+  | { kind: "futureDate" }
+  | { kind: "futureTime" }
+  | { kind: "fields"; fields: string[] };
+
+/** Why "Salvează documentul" is blocked, in the order the user should fix it; empty when it can be saved. */
+export function saveBlockers(review: Review, today: string, currentTime: string): SaveBlocker[] {
+  const blockers: SaveBlocker[] = [];
+  const toCheck = countToCheck(review);
+  if (toCheck > 0) {
+    blockers.push({ kind: "toCheck", count: toCheck });
+  }
+  if (review.items.length === 0) {
+    blockers.push({ kind: "noProducts" });
+  } else if (review.items.some((item) => parseLineAmount(item.amount.value) === null)) {
+    blockers.push({ kind: "amount" });
+  } else if (!reviewTotal(review).matches) {
+    blockers.push({ kind: "total" });
+  }
+  if (isFutureDate(review, today)) {
+    blockers.push({ kind: "futureDate" });
+  }
+  if (isFutureTime(review, today, currentTime)) {
+    blockers.push({ kind: "futureTime" });
+  }
+  const validation = validateScannedDocument(toDocumentBody(review), today, currentTime);
+  if (!validation.ok && blockers.length === 0) {
+    const fields = validation.fields.filter((field) => field in FIELD_LABELS).map((field) => FIELD_LABELS[field]);
+    blockers.push({ kind: "fields", fields });
+  }
+  return blockers;
+}
+
+export function canSave(review: Review, today: string, currentTime?: string): boolean {
   return (
     countToCheck(review) === 0 &&
     reviewTotal(review).matches &&
-    validateScannedDocument(toDocumentBody(review), today).ok
+    validateScannedDocument(toDocumentBody(review), today, currentTime).ok
   );
 }

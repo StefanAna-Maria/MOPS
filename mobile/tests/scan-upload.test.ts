@@ -1,6 +1,6 @@
 import { ImageManipulator } from "expo-image-manipulator";
 import { apiFetch } from "@/lib/api";
-import { MAX_SCAN_SIDE, ScanUploadError, fetchScan, prepareScanImage, uploadScan } from "@/lib/scan-upload";
+import { MAX_SCAN_SIDE, ScanUploadError, fetchScan, prepareScanImage, retryScan, uploadScan } from "@/lib/scan-upload";
 
 jest.mock("@/lib/api", () => ({ apiFetch: jest.fn() }));
 
@@ -151,5 +151,26 @@ describe("fetchScan", () => {
     expect(await fetchScan("s1")).toEqual({ id: "s1", status: "DONE" });
     expect(await fetchScan("missing")).toBeNull();
     expect(apiFetchMock).toHaveBeenCalledWith("/api/scans/s1");
+  });
+});
+
+describe("retryScan", () => {
+  it("CA-10.2: posts to /api/scans/:id/retry and returns the restarted scan", async () => {
+    apiFetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 202,
+      json: async () => ({ scan: { id: "s1", status: "PROCESSING", stage: "READING" } }),
+    });
+
+    const restarted = await retryScan("s1");
+
+    expect(restarted).toEqual({ id: "s1", status: "PROCESSING", stage: "READING" });
+    expect(apiFetchMock).toHaveBeenCalledWith("/api/scans/s1/retry", { method: "POST" });
+  });
+
+  it("throws ScanUploadError NOT_FOUND on 404", async () => {
+    apiFetchMock.mockResolvedValueOnce({ ok: false, status: 404, json: async () => ({}) });
+
+    await expect(retryScan("missing")).rejects.toEqual(new ScanUploadError("NOT_FOUND"));
   });
 });

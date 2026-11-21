@@ -6,17 +6,19 @@ import {
   EXPENSE_CATEGORY_LABELS,
   PAYMENT_METHODS,
   PAYMENT_METHOD_LABELS,
+  parseLineAmount,
   type ExpenseCategory,
   type OcrReading,
 } from "@ocrinvoice/shared";
 import { Card } from "@/components/card";
+import { DateTimeField, formatPickedDate } from "@/components/date-time-field";
 import { PrimaryButton } from "@/components/primary-button";
 import { SegmentedField } from "@/components/segmented-field";
 import { SelectField } from "@/components/select-field";
 import { TextField } from "@/components/text-field";
 import { apiFetch } from "@/lib/api";
 import { showServerUnavailable } from "@/lib/alerts";
-import { localTodayIso } from "@/lib/dates";
+import { localTimeNow, localTodayIso } from "@/lib/dates";
 import { amountToCents, formatLei } from "@/lib/expense-list";
 import { REVIEW_MESSAGES } from "@/lib/expense-messages";
 import {
@@ -24,10 +26,14 @@ import {
   confirmField,
   createReview,
   editField,
+  isFutureDate,
+  isFutureTime,
   newItem,
   reviewTotal,
+  saveBlockers,
   toDocumentBody,
   type Review,
+  type SaveBlocker,
   type ReviewField,
   type ReviewItem,
 } from "@/lib/scan-review";
@@ -48,20 +54,23 @@ function FieldStatusBadge<T>({
   onConfirm: () => void;
 }) {
   if (field.status === "verify") {
+    const empty = field.value === null || field.value === "";
     return (
       <View style={styles.badgeRow}>
         <Text style={[styles.badge, styles.badgeVerify]} accessibilityLabel={`${label}: ${REVIEW_MESSAGES.verify}`}>
           {REVIEW_MESSAGES.verify}
         </Text>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`${REVIEW_MESSAGES.confirm}: ${label}`}
-          onPress={onConfirm}
-          hitSlop={8}
-          style={({ pressed }) => pressed && styles.pressed}
-        >
-          <Text style={styles.confirm}>{REVIEW_MESSAGES.confirm}</Text>
-        </Pressable>
+        {empty ? null : (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`${REVIEW_MESSAGES.confirm}: ${label}`}
+            onPress={onConfirm}
+            hitSlop={8}
+            style={({ pressed }) => pressed && styles.pressed}
+          >
+            <Text style={styles.confirm}>{REVIEW_MESSAGES.confirm}</Text>
+          </Pressable>
+        )}
       </View>
     );
   }
@@ -82,18 +91,49 @@ function FieldStatusBadge<T>({
 
 type TextKey = "merchant" | "date" | "time" | "total";
 
+function blockerMessage(blocker: SaveBlocker) {
+  switch (blocker.kind) {
+    case "toCheck":
+      return REVIEW_MESSAGES.blockedToCheck(blocker.count);
+    case "noProducts":
+      return REVIEW_MESSAGES.blockedNoProducts;
+    case "amount":
+      return REVIEW_MESSAGES.blockedAmount;
+    case "total":
+      return REVIEW_MESSAGES.blockedTotal;
+    case "futureDate":
+      return REVIEW_MESSAGES.futureDate;
+    case "futureTime":
+      return REVIEW_MESSAGES.futureTime;
+    case "fields":
+      return REVIEW_MESSAGES.blockedFields(blocker.fields.join(", "));
+  }
+}
+
 export function ScanReview({ scanId, reading }: ScanReviewProps) {
   const [review, setReview] = useState<Review>(() => createReview(reading));
   const [loading, setLoading] = useState(false);
   const saving = useRef(false);
 
+  const today = localTodayIso();
+  const now = localTimeNow();
   const total = reviewTotal(review);
-  const allowed = canSave(review, localTodayIso());
+  const allowed = canSave(review, today, now);
+  const blockers = allowed ? [] : saveBlockers(review, today, now);
+  const dateError = isFutureDate(review, today) ? REVIEW_MESSAGES.futureDate : null;
+  const timeError = isFutureTime(review, today, now) ? REVIEW_MESSAGES.futureTime : null;
+  const pickedToday = review.date.value === formatPickedDate(new Date());
 
   const editText = (key: TextKey) => (value: string) =>
-    setReview((previous) => ({ ...previous, [key]: editField(previous[key], value) }));
+    setReview((previous) => ({
+      ...previous,
+      [key]: editField(previous[key], value),
+    }));
   const confirm = (key: TextKey | "paymentMethod") => () =>
-    setReview((previous) => ({ ...previous, [key]: confirmField(previous[key] as ReviewField<unknown>) }));
+    setReview((previous) => ({
+      ...previous,
+      [key]: confirmField(previous[key] as ReviewField<unknown>),
+    }));
 
   const updateItem = (key: string, change: (item: ReviewItem) => ReviewItem) =>
     setReview((previous) => ({
@@ -138,8 +178,30 @@ export function ScanReview({ scanId, reading }: ScanReviewProps) {
     <>
       <Card>
         {textField("merchant", "Magazin")}
-        {textField("date", "Data", { placeholder: "ZZ.LL.AAAA", keyboardType: "numbers-and-punctuation" })}
-        {textField("time", "Ora", { placeholder: "HH:MM", keyboardType: "numbers-and-punctuation" })}
+        <View style={styles.field}>
+          <DateTimeField
+            label="Data"
+            mode="date"
+            value={review.date.value}
+            onChange={editText("date")}
+            maximumDate={new Date()}
+            placeholder="ZZ.LL.AAAA"
+            error={dateError}
+          />
+          <FieldStatusBadge label="Data" field={review.date} onConfirm={confirm("date")} />
+        </View>
+        <View style={styles.field}>
+          <DateTimeField
+            label="Ora"
+            mode="time"
+            value={review.time.value}
+            onChange={editText("time")}
+            maximumDate={pickedToday ? new Date() : undefined}
+            placeholder="HH:MM"
+            error={timeError}
+          />
+          <FieldStatusBadge label="Ora" field={review.time} onConfirm={confirm("time")} />
+        </View>
         {textField("total", "Total", {
           placeholder: "0,00",
           keyboardType: "decimal-pad",
@@ -152,7 +214,10 @@ export function ScanReview({ scanId, reading }: ScanReviewProps) {
             options={PAYMENT_METHODS}
             labels={PAYMENT_METHOD_LABELS}
             onChange={(value) =>
-              setReview((previous) => ({ ...previous, paymentMethod: editField(previous.paymentMethod, value) }))
+              setReview((previous) => ({
+                ...previous,
+                paymentMethod: editField(previous.paymentMethod, value),
+              }))
             }
           />
           <FieldStatusBadge label="Plată" field={review.paymentMethod} onConfirm={confirm("paymentMethod")} />
@@ -178,12 +243,22 @@ export function ScanReview({ scanId, reading }: ScanReviewProps) {
               <TextField
                 label={nameLabel}
                 value={item.name.value}
-                onChangeText={(value) => updateItem(item.key, (it) => ({ ...it, name: editField(it.name, value) }))}
+                onChangeText={(value) =>
+                  updateItem(item.key, (it) => ({
+                    ...it,
+                    name: editField(it.name, value),
+                  }))
+                }
               />
               <FieldStatusBadge
                 label={nameLabel}
                 field={item.name}
-                onConfirm={() => updateItem(item.key, (it) => ({ ...it, name: confirmField(it.name) }))}
+                onConfirm={() =>
+                  updateItem(item.key, (it) => ({
+                    ...it,
+                    name: confirmField(it.name),
+                  }))
+                }
               />
             </View>
             <View style={styles.field}>
@@ -191,16 +266,29 @@ export function ScanReview({ scanId, reading }: ScanReviewProps) {
                 label={amountLabel}
                 value={item.amount.value}
                 onChangeText={(value) =>
-                  updateItem(item.key, (it) => ({ ...it, amount: editField(it.amount, value) }))
+                  updateItem(item.key, (it) => ({
+                    ...it,
+                    amount: editField(it.amount, value),
+                  }))
                 }
                 placeholder="0,00"
                 keyboardType="numbers-and-punctuation"
                 accessory={<Text style={styles.currency}>lei</Text>}
+                error={
+                  item.amount.value.trim() && parseLineAmount(item.amount.value) === null
+                    ? REVIEW_MESSAGES.invalidAmount
+                    : null
+                }
               />
               <FieldStatusBadge
                 label={amountLabel}
                 field={item.amount}
-                onConfirm={() => updateItem(item.key, (it) => ({ ...it, amount: confirmField(it.amount) }))}
+                onConfirm={() =>
+                  updateItem(item.key, (it) => ({
+                    ...it,
+                    amount: confirmField(it.amount),
+                  }))
+                }
               />
             </View>
             <View style={styles.field}>
@@ -210,13 +298,21 @@ export function ScanReview({ scanId, reading }: ScanReviewProps) {
                 options={EXPENSE_CATEGORIES}
                 labels={EXPENSE_CATEGORY_LABELS}
                 onChange={(value: ExpenseCategory) =>
-                  updateItem(item.key, (it) => ({ ...it, category: editField(it.category, value) }))
+                  updateItem(item.key, (it) => ({
+                    ...it,
+                    category: editField(it.category, value),
+                  }))
                 }
               />
               <FieldStatusBadge
                 label={categoryLabel}
                 field={item.category}
-                onConfirm={() => updateItem(item.key, (it) => ({ ...it, category: confirmField(it.category) }))}
+                onConfirm={() =>
+                  updateItem(item.key, (it) => ({
+                    ...it,
+                    category: confirmField(it.category),
+                  }))
+                }
               />
             </View>
             <Pressable
@@ -239,11 +335,18 @@ export function ScanReview({ scanId, reading }: ScanReviewProps) {
       <PrimaryButton
         title={REVIEW_MESSAGES.addProduct}
         variant="outline"
-        onPress={() => setReview((previous) => ({ ...previous, items: [...previous.items, newItem()] }))}
+        onPress={() =>
+          setReview((previous) => ({
+            ...previous,
+            items: [...previous.items, newItem()],
+          }))
+        }
       />
 
       <View style={styles.summary}>
-        <Text style={styles.summaryTotal}>{REVIEW_MESSAGES.itemsTotal(formatLei(amountToCents(total.itemsTotal)))}</Text>
+        <Text style={styles.summaryTotal}>
+          {REVIEW_MESSAGES.itemsTotal(formatLei(amountToCents(total.itemsTotal)))}
+        </Text>
         <Text style={[styles.check, total.matches ? styles.checkOk : styles.checkWarn]}>
           {total.matches
             ? REVIEW_MESSAGES.totalMatches
@@ -252,6 +355,15 @@ export function ScanReview({ scanId, reading }: ScanReviewProps) {
       </View>
 
       <PrimaryButton title={REVIEW_MESSAGES.save} onPress={handleSave} disabled={!allowed} loading={loading} />
+      {blockers.length > 0 ? (
+        <View style={styles.blockers} accessibilityLiveRegion="polite">
+          {blockers.map((blocker) => (
+            <Text key={blocker.kind} style={styles.blocker}>
+              {blockerMessage(blocker)}
+            </Text>
+          ))}
+        </View>
+      ) : null}
     </>
   );
 }
@@ -323,6 +435,15 @@ const styles = StyleSheet.create({
     color: colors.successText,
   },
   checkWarn: {
+    color: "#92400E",
+  },
+  blockers: {
+    alignItems: "center",
+    gap: spacing.xs,
+  },
+  blocker: {
+    ...typography.bodySm,
+    textAlign: "center",
     color: "#92400E",
   },
 });

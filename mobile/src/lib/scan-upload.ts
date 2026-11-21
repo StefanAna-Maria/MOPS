@@ -83,3 +83,17 @@ export async function fetchScan(id: string): Promise<Scan | null> {
   const data: { scan: Scan } = await response.json();
   return data.scan;
 }
+
+/** CA-10.2: retries reading an already-uploaded scan after an OCR error. */
+export async function retryScan(id: string): Promise<Scan> {
+  const response = await apiFetch(`/api/scans/${encodeURIComponent(id)}/retry`, { method: "POST" });
+  if (response.status === 404) {
+    throw new ScanUploadError("NOT_FOUND");
+  }
+  if (!response.ok) {
+    const data = await response.json().catch(() => null);
+    throw new ScanUploadError(typeof data?.code === "string" ? data.code : `HTTP_${response.status}`);
+  }
+  const data: { scan: Scan } = await response.json();
+  return data.scan;
+}

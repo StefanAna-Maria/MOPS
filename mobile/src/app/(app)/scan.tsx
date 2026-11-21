@@ -240,7 +240,9 @@ export default function ScanScreen() {
 
         <SafeAreaView edges={["bottom"]} style={styles.previewFooter}>
           <Text style={styles.previewHint}>
-            Verifică dacă textul, data și totalul de pe bon sunt lizibile.
+            {isUploading
+              ? SCAN_MESSAGES.stages.UPLOADING
+              : "Verifică dacă textul, data și totalul de pe bon sunt lizibile."}
           </Text>
           <View style={styles.previewActions}>
             <View style={styles.actionItem}>

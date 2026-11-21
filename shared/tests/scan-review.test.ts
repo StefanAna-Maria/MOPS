@@ -26,11 +26,13 @@ describe("parseLineAmount", () => {
     ["-3,20", "-3.20"],
     [" -0.5 ", "-0.50"],
     ["007", "7.00"],
+    ["0", "0.00"],
+    ["-0,00", "0.00"],
   ])("accepts %s as %s", (input, expected) => {
     expect(parseLineAmount(input)).toBe(expected);
   });
 
-  it.each(["0", "-0,00", "12,345", "abc", "", "--3", "3-", "10000000"])("rejects %s", (input) => {
+  it.each(["12,345", "abc", "", "--3", "3-", "10000000"])("rejects %s", (input) => {
     expect(parseLineAmount(input)).toBeNull();
   });
 });
@@ -59,6 +61,10 @@ describe("checkTotal", () => {
   it("CA-11.3: does not match while the total or a product amount is missing", () => {
     expect(checkTotal(null, ["10.00"])).toMatchObject({ itemsTotal: "10.00", matches: false });
     expect(checkTotal("10.00", ["10.00", null])).toMatchObject({ itemsTotal: "10.00", matches: false });
+  });
+
+  it("CA-11.2: a free product (0,00 lei, e.g. a sauce included in the menu) counts as read", () => {
+    expect(checkTotal("20.00", ["5.00", "0.00", "15.00"])).toMatchObject({ itemsTotal: "20.00", matches: true });
   });
 
   it("CA-11.3: does not match without products", () => {
@@ -146,6 +152,19 @@ describe("validateScannedDocument", () => {
   ])("CA-11.3: refuses %s", (_case, items) => {
     const result = validateScannedDocument(validDocument({ items }), TODAY);
     expect(result.ok ? [] : result.fields).toContain("items");
+  });
+
+  it("refuses a time later than now on today's date", () => {
+    const today = validDocument({ date: TODAY, time: "17:00" });
+
+    expect(validateScannedDocument(today, TODAY, "14:00")).toEqual({ ok: false, fields: ["time"] });
+    expect(validateScannedDocument({ ...today, time: "14:00" }, TODAY, "14:00").ok).toBe(true);
+  });
+
+  it("accepts a late time on a past day", () => {
+    const yesterday = validDocument({ date: "2026-11-18", time: "18:00" });
+
+    expect(validateScannedDocument(yesterday, TODAY, "14:00").ok).toBe(true);
   });
 
   it("refuses something that is not a document", () => {

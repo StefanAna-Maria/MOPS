@@ -1,16 +1,17 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
+import { Prisma } from "../generated/prisma/client.js";
 import { prisma } from "../lib/prisma.js";
 import { requireSession, type SessionVariables } from "../lib/session.js";
 import { resolveContext } from "../lib/context.js";
 import { detectImageType, readUpload, saveUpload, storageKeyFor } from "../lib/uploads.js";
 import { isPdf, renderFirstPageAsPng } from "../lib/pdf-render.js";
-import { isScanPending, startScan } from "../lib/scan-processor.js";
-import { Prisma } from "../generated/prisma/client.js";
+import { getScanStage, isScanPending, startScan } from "../lib/scan-processor.js";
 import { documentWithLines, requestTimeZone, serializeDocument, utcDate } from "./documents.js";
 import {
   MAX_SCAN_FILE_BYTES,
+  timeInTimeZone,
   todayInTimeZone,
   validateScannedDocument,
   type OcrReading,
@@ -52,6 +53,7 @@ function serializeScan(file: FileWithResult): Scan {
     id: file.id,
     context: file.companyId ? "company" : "personal",
     status,
+    stage: status === "PROCESSING" ? (getScanStage(file.id) ?? "READING") : null,
     uploadedAt: file.uploadedAt.toISOString(),
     reading: status === "DONE" ? (result?.result as OcrReading) : null,
     errorCode: status === "FAILED" ? (errorCode ?? "OCR_UNAVAILABLE") : null,
@@ -133,7 +135,7 @@ scans.post(
   },
 );
 
-// CA-09.2: the reading's status and, once DONE, the values read with their confidence. Another user's scan → 404.
+// CA-09.2 / CA-10.1: the reading's status, current stage, and, once DONE, the values read with their confidence.
 scans.get("/:id", async (c) => {
   const user = c.get("user");
   const file = await prisma.file.findFirst({ where: { id: c.req.param("id"), userId: user.id }, include: withResult });
@@ -141,6 +143,39 @@ scans.get("/:id", async (c) => {
     return c.json({ code: "SCAN_NOT_FOUND" }, 404);
   }
   return c.json({ scan: serializeScan(file) });
+});
+
+// CA-10.2: retries reading an already-uploaded photo when the OCR service was stopped or timed out.
+scans.post("/:id/retry", async (c) => {
+  const user = c.get("user");
+  const file = await prisma.file.findFirst({ where: { id: c.req.param("id"), userId: user.id }, include: withResult });
+  if (!file) {
+    return c.json({ code: "SCAN_NOT_FOUND" }, 404);
+  }
+  const bytes = await readUpload(file.storageKey).catch(() => null);
+  if (!bytes) {
+    return c.json({ code: "SCAN_NOT_FOUND" }, 404);
+  }
+
+  if (!isScanPending(file.id)) {
+    const updated = await prisma.file.update({
+      where: { id: file.id },
+      data: {
+        uploadedAt: new Date(),
+        ocrResult: {
+          upsert: {
+            create: { status: "PROCESSING" },
+            update: { status: "PROCESSING", result: Prisma.DbNull, errorCode: null },
+          },
+        },
+      },
+      include: withResult,
+    });
+    startScan(updated.id, todayInTimeZone(requestTimeZone(c.req.header("X-Time-Zone"))));
+    return c.json({ scan: serializeScan(updated) }, 202);
+  }
+
+  return c.json({ scan: serializeScan(file) }, 202);
 });
 
 // The uploaded photo itself (for showing it next to the reading, and attached to the saved document in US-11).
@@ -179,7 +214,8 @@ scans.post("/:id/document", async (c) => {
   }
 
   const body = await c.req.json().catch(() => null);
-  const result = validateScannedDocument(body, todayInTimeZone(requestTimeZone(c.req.header("X-Time-Zone"))));
+  const timeZone = requestTimeZone(c.req.header("X-Time-Zone"));
+  const result = validateScannedDocument(body, todayInTimeZone(timeZone), timeInTimeZone(timeZone));
   if (!result.ok) {
     return c.json({ code: "INVALID_DOCUMENT", fields: result.fields }, 400);
   }

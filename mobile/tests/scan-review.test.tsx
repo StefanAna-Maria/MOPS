@@ -1,5 +1,5 @@
 import { Alert } from "react-native";
-import { fireEvent, render, screen } from "@testing-library/react-native";
+import { act, fireEvent, render, screen } from "@testing-library/react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import type { ExpenseDocument, OcrReading, Scan } from "@ocrinvoice/shared";
 import ScanResultScreen from "@/app/(app)/scan-result/[id]";
@@ -191,6 +191,128 @@ describe("Verificarea datelor citite", () => {
     expect(alertSpy).toHaveBeenCalledWith("Serverul nu răspunde", expect.any(String));
     expect(router.replace).not.toHaveBeenCalled();
     expect(screen.getByDisplayValue("Carrefour express")).toBeOnTheScreen();
+  });
+});
+
+describe("De ce nu se poate salva", () => {
+  const withFreeSauce: OcrReading = {
+    ...reading,
+    total: { value: "20.00", confidence: 0.95 },
+    items: [
+      {
+        ...reading.items[0],
+        name: { value: "SPRING ROLLS", confidence: 0.95 },
+        amount: { value: "5.00", confidence: 0.95 },
+      },
+      {
+        ...reading.items[0],
+        name: { value: "SOS SWEET CHILLI - INCLUS", confidence: 0.95 },
+        amount: { value: "0.00", confidence: 0.95 },
+      },
+      {
+        ...reading.items[0],
+        name: { value: "OREZ CHICKEN FINGERS", confidence: 0.95 },
+        amount: { value: "15.00", confidence: 0.95 },
+      },
+    ],
+    itemsTotal: "20.00",
+    totalMatches: true,
+  };
+
+  it("a free product (0,00 lei) does not block saving", async () => {
+    await showReview(withFreeSauce);
+
+    expect(screen.getByText("Se potrivește cu totalul de pe bon")).toBeOnTheScreen();
+    expect(saveButton()).toBeEnabled();
+  });
+
+  it("says why saving is blocked", async () => {
+    await showReview(withoutDiscount);
+
+    expect(screen.getByText("Mai ai o valoare de verificat.")).toBeOnTheScreen();
+    expect(screen.getByText("Produsele nu se potrivesc cu totalul de pe bon.")).toBeOnTheScreen();
+  });
+
+  it("points to a product amount that is not valid", async () => {
+    await showReview();
+    await fireEvent.press(screen.getByRole("button", { name: "E corect: Total" }));
+
+    await fireEvent.changeText(screen.getByLabelText("Suma produsului 1"), "29,375");
+
+    expect(screen.getByText("Introdu o sumă cu cel mult două zecimale.")).toBeOnTheScreen();
+    expect(screen.getByText("Suma unui produs nu este validă.")).toBeOnTheScreen();
+    expect(saveButton()).toBeDisabled();
+  });
+
+  it("a value that was not read at all cannot be confirmed with E corect, it has to be filled in", async () => {
+    await showReview({ ...reading, merchant: { value: null, confidence: 0 } });
+
+    expect(screen.getByLabelText("Magazin: Verifică")).toBeOnTheScreen();
+    expect(screen.queryByRole("button", { name: "E corect: Magazin" })).toBeNull();
+  });
+});
+
+describe("Data și ora, alese din calendar și din rotițe", () => {
+  async function pick(fieldName: string, date: Date) {
+    await fireEvent.press(screen.getByRole("button", { name: fieldName }));
+    const picker = screen.getByTestId("date-time-picker");
+    await act(async () => {
+      picker.props.onChange({ type: "set" }, date);
+    });
+    await fireEvent.press(screen.getByRole("button", { name: "Gata" }));
+  }
+
+  it("the date is picked from a calendar that does not offer future days", async () => {
+    await showReview();
+
+    await fireEvent.press(screen.getByRole("button", { name: "Data: 12.11.2026" }));
+    const picker = screen.getByTestId("date-time-picker");
+
+    expect(picker.props.mode).toBe("date");
+    expect(picker.props.display).toBe("inline");
+    expect(picker.props.maximumDate.getTime()).toBeLessThanOrEqual(Date.now());
+  });
+
+  it("a date picked from the calendar is marked Corectat", async () => {
+    await showReview();
+
+    await pick("Data: 12.11.2026", new Date(2026, 10, 10));
+
+    expect(screen.getByRole("button", { name: "Data: 10.11.2026" })).toBeOnTheScreen();
+    expect(screen.getByLabelText("Data: Corectat")).toBeOnTheScreen();
+  });
+
+  it("the time is picked from a wheel, like an alarm", async () => {
+    await showReview();
+
+    await fireEvent.press(screen.getByRole("button", { name: "Ora: 17:58" }));
+    const picker = screen.getByTestId("date-time-picker");
+
+    expect(picker.props.mode).toBe("time");
+    expect(picker.props.display).toBe("spinner");
+  });
+
+  it("a time later than now is refused for today's date, and saving stays blocked", async () => {
+    await showReview();
+    await fireEvent.press(screen.getByRole("button", { name: "E corect: Total" }));
+    const today = new Date();
+    const lateToday = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59);
+
+    await pick("Data: 12.11.2026", today);
+    await pick("Ora: 17:58", lateToday);
+
+    expect(screen.getAllByText("Ora nu poate fi în viitor.")).toHaveLength(2);
+    expect(saveButton()).toBeDisabled();
+  });
+
+  it("a late time is fine on a past day", async () => {
+    await showReview();
+    await fireEvent.press(screen.getByRole("button", { name: "E corect: Total" }));
+
+    await pick("Ora: 17:58", new Date(2026, 10, 12, 23, 59));
+
+    expect(screen.queryByText("Ora nu poate fi în viitor.")).toBeNull();
+    expect(saveButton()).toBeEnabled();
   });
 });
 

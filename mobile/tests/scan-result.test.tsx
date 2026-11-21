@@ -1,14 +1,26 @@
 import { act, fireEvent, render, screen } from "@testing-library/react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import type { OcrReading, Scan } from "@ocrinvoice/shared";
-import ScanResultScreen from "@/app/(app)/scan-result/[id]";
+import ScanResultScreen, { resolveActiveStage } from "@/app/(app)/scan-result/[id]";
 import { REVIEW_MESSAGES, SCAN_MESSAGES } from "@/lib/expense-messages";
-import { fetchScan } from "@/lib/scan-upload";
+import { ScanUploadError, fetchScan, retryScan } from "@/lib/scan-upload";
 
-jest.mock("@/lib/scan-upload", () => ({ POLL_INTERVAL_MS: 2000, fetchScan: jest.fn() }));
+jest.mock("@/lib/scan-upload", () => ({
+  POLL_INTERVAL_MS: 2000,
+  ScanUploadError: class MockScanUploadError extends Error {
+    code: string;
+    constructor(mockCode: string) {
+      super(mockCode);
+      this.code = mockCode;
+    }
+  },
+  fetchScan: jest.fn(),
+  retryScan: jest.fn(),
+}));
 jest.mock("@/lib/api", () => ({ apiFetch: jest.fn() }));
 
 const fetchScanMock = fetchScan as unknown as jest.Mock;
+const retryScanMock = retryScan as unknown as jest.Mock;
 const paramsMock = useLocalSearchParams as unknown as jest.Mock;
 
 const reading: OcrReading = {
@@ -40,6 +52,7 @@ function scan(overrides: Partial<Scan>): Scan {
     id: "scan-1",
     context: "personal",
     status: "PROCESSING",
+    stage: "READING",
     uploadedAt: "2026-11-15T15:00:00.000Z",
     reading: null,
     errorCode: null,
@@ -57,20 +70,53 @@ afterEach(() => {
   jest.useRealTimers();
 });
 
-describe("Citirea documentului", () => {
-  it("CA-09.1: shows that the document is being read while the server is reading it", async () => {
-    fetchScanMock.mockResolvedValue(scan({ status: "PROCESSING" }));
+describe("Citirea documentului (US-09 & US-10)", () => {
+  it("CA-09.1 / CA-10.1: shows the 4 real stages while the server is reading the document", async () => {
+    fetchScanMock.mockResolvedValue(scan({ status: "PROCESSING", stage: "READING" }));
 
     await render(<ScanResultScreen />);
 
     expect(fetchScanMock).toHaveBeenCalledWith("scan-1");
-    expect(await screen.findByText(SCAN_MESSAGES.reading)).toBeOnTheScreen();
+    expect(await screen.findByText("Încărcăm documentul")).toBeOnTheScreen();
+    expect(screen.getByText("Citim documentul")).toBeOnTheScreen();
+    expect(screen.getByText("Găsim magazinul, data și totalul")).toBeOnTheScreen();
+    expect(screen.getByText("Extragem produsele")).toBeOnTheScreen();
+    expect(screen.getByTestId("stage-done-UPLOADING")).toBeOnTheScreen();
+    expect(screen.getByTestId("stage-active-READING")).toBeOnTheScreen();
+    expect(screen.getByTestId("stage-pending-EXTRACTING_FIELDS")).toBeOnTheScreen();
+    expect(screen.getByTestId("stage-pending-EXTRACTING_ITEMS")).toBeOnTheScreen();
+  });
+
+  it("CA-10.1: advances through the real stages reported by the server", async () => {
+    fetchScanMock
+      .mockResolvedValueOnce(scan({ status: "PROCESSING", stage: "UPLOADING" }))
+      .mockResolvedValueOnce(scan({ status: "PROCESSING", stage: "READING" }))
+      .mockResolvedValueOnce(scan({ status: "PROCESSING", stage: "EXTRACTING_FIELDS" }))
+      .mockResolvedValueOnce(scan({ status: "PROCESSING", stage: "EXTRACTING_ITEMS" }));
+
+    await render(<ScanResultScreen />);
+    expect(await screen.findByTestId("stage-active-UPLOADING")).toBeOnTheScreen();
+
+    await act(async () => {
+      jest.advanceTimersByTime(2000);
+    });
+    expect(await screen.findByTestId("stage-active-READING")).toBeOnTheScreen();
+
+    await act(async () => {
+      jest.advanceTimersByTime(2000);
+    });
+    expect(await screen.findByTestId("stage-active-EXTRACTING_FIELDS")).toBeOnTheScreen();
+
+    await act(async () => {
+      jest.advanceTimersByTime(2000);
+    });
+    expect(await screen.findByTestId("stage-active-EXTRACTING_ITEMS")).toBeOnTheScreen();
   });
 
   it("CA-09.2: asks again every 2 seconds until the reading is done, then shows every value with its confidence", async () => {
     fetchScanMock
       .mockResolvedValueOnce(scan({ status: "PROCESSING" }))
-      .mockResolvedValueOnce(scan({ status: "DONE", reading }));
+      .mockResolvedValueOnce(scan({ status: "DONE", stage: null, reading }));
     await render(<ScanResultScreen />);
     expect(await screen.findByText(SCAN_MESSAGES.reading)).toBeOnTheScreen();
 
@@ -80,8 +126,8 @@ describe("Citirea documentului", () => {
 
     expect(fetchScanMock).toHaveBeenCalledTimes(2);
     expect(await screen.findByDisplayValue("Carrefour express")).toBeOnTheScreen();
-    expect(screen.getByDisplayValue("12.11.2026")).toBeOnTheScreen();
-    expect(screen.getByDisplayValue("17:58")).toBeOnTheScreen();
+    expect(screen.getByRole("button", { name: "Data: 12.11.2026" })).toBeOnTheScreen();
+    expect(screen.getByRole("button", { name: "Ora: 17:58" })).toBeOnTheScreen();
     expect(screen.getByDisplayValue("26,17")).toBeOnTheScreen();
     expect(screen.getByRole("radio", { name: "Card" })).toBeChecked();
     expect(screen.getByDisplayValue("PARTY MIX MIXED 60G")).toBeOnTheScreen();
@@ -94,6 +140,7 @@ describe("Citirea documentului", () => {
     fetchScanMock.mockResolvedValue(
       scan({
         status: "DONE",
+        stage: null,
         reading: {
           ...reading,
           items: reading.items.slice(0, 1),
@@ -114,17 +161,51 @@ describe("Citirea documentului", () => {
     ["OCR_UNAVAILABLE"],
     ["OCR_TIMEOUT"],
     ["UNREADABLE"],
-  ] as const)("CA-10.2: shows Documentul nu a putut fi citit. when the reading failed with %s", async (errorCode) => {
-    fetchScanMock.mockResolvedValue(scan({ status: "FAILED", errorCode }));
+  ] as const)("CA-10.2: shows Documentul nu a putut fi citit. with Încearcă din nou when reading failed with %s", async (errorCode) => {
+    fetchScanMock.mockResolvedValue(scan({ status: "FAILED", stage: null, errorCode }));
 
     await render(<ScanResultScreen />);
 
-    expect(await screen.findByText(SCAN_MESSAGES.failed)).toBeOnTheScreen();
+    expect(await screen.findByText("Documentul nu a putut fi citit.")).toBeOnTheScreen();
     expect(screen.getByText(SCAN_MESSAGES.failedReasons[errorCode])).toBeOnTheScreen();
+    expect(screen.getByRole("button", { name: "Încearcă din nou" })).toBeOnTheScreen();
+  });
+
+  it("CA-10.2: pressing Încearcă din nou retries the reading on the server and shows the result once done", async () => {
+    fetchScanMock
+      .mockResolvedValueOnce(scan({ status: "FAILED", stage: null, errorCode: "OCR_UNAVAILABLE" }))
+      .mockResolvedValueOnce(scan({ status: "PROCESSING", stage: "READING" }))
+      .mockResolvedValueOnce(scan({ status: "DONE", stage: null, reading }));
+    retryScanMock.mockResolvedValueOnce(scan({ status: "PROCESSING", stage: "READING" }));
+
+    await render(<ScanResultScreen />);
+    expect(await screen.findByText("Documentul nu a putut fi citit.")).toBeOnTheScreen();
+
+    await fireEvent.press(screen.getByRole("button", { name: "Încearcă din nou" }));
+
+    expect(retryScanMock).toHaveBeenCalledWith("scan-1");
+    expect(await screen.findByText("Citim documentul")).toBeOnTheScreen();
+
+    await act(async () => {
+      jest.advanceTimersByTime(2000);
+    });
+
+    expect(await screen.findByDisplayValue("Carrefour express")).toBeOnTheScreen();
+  });
+
+  it("CA-10.2: stays on the failed screen when Încearcă din nou fails due to a network error", async () => {
+    fetchScanMock.mockResolvedValueOnce(scan({ status: "FAILED", stage: null, errorCode: "OCR_UNAVAILABLE" }));
+    retryScanMock.mockRejectedValueOnce(new ScanUploadError("HTTP_503"));
+
+    await render(<ScanResultScreen />);
+    await fireEvent.press(await screen.findByRole("button", { name: "Încearcă din nou" }));
+
+    expect(await screen.findByText("Documentul nu a putut fi citit.")).toBeOnTheScreen();
+    expect(screen.getByText(SCAN_MESSAGES.failedReasons.NETWORK)).toBeOnTheScreen();
   });
 
   it("offers to photograph the document again after a failure", async () => {
-    fetchScanMock.mockResolvedValue(scan({ status: "FAILED", errorCode: "UNREADABLE" }));
+    fetchScanMock.mockResolvedValue(scan({ status: "FAILED", stage: null, errorCode: "UNREADABLE" }));
     await render(<ScanResultScreen />);
 
     await fireEvent.press(await screen.findByRole("button", { name: SCAN_MESSAGES.retake }));
@@ -151,5 +232,38 @@ describe("Citirea documentului", () => {
     });
 
     expect(fetchScanMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("CA-10.1: etapele citirii nu sar înapoi", () => {
+  it("shows the real stage sent by the server, however long the reading takes", () => {
+    expect(resolveActiveStage("READING", 40)).toBe("READING");
+    expect(resolveActiveStage("EXTRACTING_FIELDS", 2)).toBe("EXTRACTING_FIELDS");
+  });
+
+  it("guesses the stage from the time only when the server sends none", () => {
+    expect(resolveActiveStage(null, 2)).toBe("READING");
+    expect(resolveActiveStage(null, 5)).toBe("EXTRACTING_FIELDS");
+    expect(resolveActiveStage(undefined, 9)).toBe("EXTRACTING_ITEMS");
+  });
+
+  it("never goes back to an earlier stage", () => {
+    expect(resolveActiveStage("EXTRACTING_FIELDS", 12, "EXTRACTING_ITEMS")).toBe("EXTRACTING_ITEMS");
+    expect(resolveActiveStage("EXTRACTING_ITEMS", 12, "EXTRACTING_FIELDS")).toBe("EXTRACTING_ITEMS");
+  });
+
+  it("stays on Citim documentul while the model is still looking at the photo", async () => {
+    fetchScanMock.mockResolvedValue(scan({ status: "PROCESSING", stage: "READING" }));
+    await render(<ScanResultScreen />);
+    expect(await screen.findByTestId("stage-active-READING")).toBeOnTheScreen();
+
+    for (let i = 0; i < 6; i += 1) {
+      await act(async () => {
+        jest.advanceTimersByTime(2000);
+      });
+    }
+
+    expect(screen.getByTestId("stage-active-READING")).toBeOnTheScreen();
+    expect(screen.queryByTestId("stage-active-EXTRACTING_ITEMS")).toBeNull();
   });
 });
