@@ -36,11 +36,18 @@
       "expo-secure-store",
       "expo-font",
       [
+        "expo-image-picker",
+        {
+          "photosPermission": "Permite accesul la poze pentru a importa bonuri și facturi."
+        }
+      ],
+      [
         "expo-camera",
         {
           "cameraPermission": "Permite accesul la cameră pentru a fotografia bonuri și facturi."
         }
-      ]
+      ],
+      "@react-native-community/datetimepicker"
     ],
     "experiments": {
       "typedRoutes": true,

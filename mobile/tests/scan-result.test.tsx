@@ -1,8 +1,8 @@
 import { act, fireEvent, render, screen } from "@testing-library/react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import type { OcrReading, Scan } from "@ocrinvoice/shared";
-import ScanResultScreen from "@/app/(app)/scan-result/[id]";
-import { SCAN_MESSAGES } from "@/lib/expense-messages";
+import ScanResultScreen, { resolveActiveStage } from "@/app/(app)/scan-result/[id]";
+import { REVIEW_MESSAGES, SCAN_MESSAGES } from "@/lib/expense-messages";
 import { ScanUploadError, fetchScan, retryScan } from "@/lib/scan-upload";
 
 jest.mock("@/lib/scan-upload", () => ({
@@ -17,6 +17,7 @@ jest.mock("@/lib/scan-upload", () => ({
   fetchScan: jest.fn(),
   retryScan: jest.fn(),
 }));
+jest.mock("@/lib/api", () => ({ apiFetch: jest.fn() }));
 
 const fetchScanMock = fetchScan as unknown as jest.Mock;
 const retryScanMock = retryScan as unknown as jest.Mock;
@@ -124,15 +125,15 @@ describe("Citirea documentului (US-09 & US-10)", () => {
     });
 
     expect(fetchScanMock).toHaveBeenCalledTimes(2);
-    expect(await screen.findByText("Carrefour express")).toBeOnTheScreen();
-    expect(screen.getByText("12.11.2026")).toBeOnTheScreen();
-    expect(screen.getByText("17:58")).toBeOnTheScreen();
-    expect(screen.getByText("26,17 lei")).toBeOnTheScreen();
-    expect(screen.getByText("Card")).toBeOnTheScreen();
-    expect(screen.getByText("PARTY MIX MIXED 60G")).toBeOnTheScreen();
-    expect(screen.getByText("-3,20 lei")).toBeOnTheScreen();
-    expect(screen.getAllByText("98%").length).toBe(5);
-    expect(screen.getByText(SCAN_MESSAGES.totalMatches)).toBeOnTheScreen();
+    expect(await screen.findByDisplayValue("Carrefour express")).toBeOnTheScreen();
+    expect(screen.getByRole("button", { name: "Data: 12.11.2026" })).toBeOnTheScreen();
+    expect(screen.getByRole("button", { name: "Ora: 17:58" })).toBeOnTheScreen();
+    expect(screen.getByDisplayValue("26,17")).toBeOnTheScreen();
+    expect(screen.getByRole("radio", { name: "Card" })).toBeChecked();
+    expect(screen.getByDisplayValue("PARTY MIX MIXED 60G")).toBeOnTheScreen();
+    expect(screen.getByDisplayValue("-3,20")).toBeOnTheScreen();
+    expect(screen.queryByText(REVIEW_MESSAGES.verify)).toBeNull();
+    expect(screen.getByText(REVIEW_MESSAGES.totalMatches)).toBeOnTheScreen();
   });
 
   it("CA-09.2: says when the products do not add up to the total", async () => {
@@ -140,14 +141,20 @@ describe("Citirea documentului (US-09 & US-10)", () => {
       scan({
         status: "DONE",
         stage: null,
-        reading: { ...reading, itemsTotal: "29.37", totalMatches: false, total: { value: "26.17", confidence: 0.4 } },
+        reading: {
+          ...reading,
+          items: reading.items.slice(0, 1),
+          itemsTotal: "29.37",
+          totalMatches: false,
+          total: { value: "26.17", confidence: 0.4 },
+        },
       }),
     );
 
     await render(<ScanResultScreen />);
 
-    expect(await screen.findByText(`${SCAN_MESSAGES.totalDiffers} (29,37 lei).`)).toBeOnTheScreen();
-    expect(screen.getByText("40%")).toBeOnTheScreen();
+    expect(await screen.findByText(REVIEW_MESSAGES.totalDiffers("3,20 lei"))).toBeOnTheScreen();
+    expect(screen.getByLabelText(`Total: ${REVIEW_MESSAGES.verify}`)).toBeOnTheScreen();
   });
 
   it.each([
@@ -183,7 +190,7 @@ describe("Citirea documentului (US-09 & US-10)", () => {
       jest.advanceTimersByTime(2000);
     });
 
-    expect(await screen.findByText("Carrefour express")).toBeOnTheScreen();
+    expect(await screen.findByDisplayValue("Carrefour express")).toBeOnTheScreen();
   });
 
   it("CA-10.2: stays on the failed screen when Încearcă din nou fails due to a network error", async () => {
@@ -225,5 +232,38 @@ describe("Citirea documentului (US-09 & US-10)", () => {
     });
 
     expect(fetchScanMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("CA-10.1: etapele citirii nu sar înapoi", () => {
+  it("shows the real stage sent by the server, however long the reading takes", () => {
+    expect(resolveActiveStage("READING", 40)).toBe("READING");
+    expect(resolveActiveStage("EXTRACTING_FIELDS", 2)).toBe("EXTRACTING_FIELDS");
+  });
+
+  it("guesses the stage from the time only when the server sends none", () => {
+    expect(resolveActiveStage(null, 2)).toBe("READING");
+    expect(resolveActiveStage(null, 5)).toBe("EXTRACTING_FIELDS");
+    expect(resolveActiveStage(undefined, 9)).toBe("EXTRACTING_ITEMS");
+  });
+
+  it("never goes back to an earlier stage", () => {
+    expect(resolveActiveStage("EXTRACTING_FIELDS", 12, "EXTRACTING_ITEMS")).toBe("EXTRACTING_ITEMS");
+    expect(resolveActiveStage("EXTRACTING_ITEMS", 12, "EXTRACTING_FIELDS")).toBe("EXTRACTING_ITEMS");
+  });
+
+  it("stays on Citim documentul while the model is still looking at the photo", async () => {
+    fetchScanMock.mockResolvedValue(scan({ status: "PROCESSING", stage: "READING" }));
+    await render(<ScanResultScreen />);
+    expect(await screen.findByTestId("stage-active-READING")).toBeOnTheScreen();
+
+    for (let i = 0; i < 6; i += 1) {
+      await act(async () => {
+        jest.advanceTimersByTime(2000);
+      });
+    }
+
+    expect(screen.getByTestId("stage-active-READING")).toBeOnTheScreen();
+    expect(screen.queryByTestId("stage-active-EXTRACTING_ITEMS")).toBeNull();
   });
 });

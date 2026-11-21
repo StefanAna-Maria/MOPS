@@ -3,7 +3,7 @@ import { colors, radius, spacing, typography } from "@/constants/theme";
 
 type SegmentedFieldProps<T extends string> = {
   label: string;
-  value: T;
+  value: T | null;
   options: readonly T[];
   labels: Record<T, string>;
   onChange: (value: T) => void;

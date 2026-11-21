@@ -33,8 +33,48 @@ export const SCAN_MESSAGES = {
   retry: "Încearcă din nou",
   retake: "Fotografiază din nou",
   home: "Înapoi la Acasă",
-  totalMatches: "Produsele se potrivesc cu totalul de pe bon.",
-  totalDiffers: "Produsele nu se potrivesc cu totalul de pe bon",
   uploadFailedTitle: "Nu am putut trimite poza",
   uploadFailed: "Verifică conexiunea și încearcă din nou.",
+};
+
+// US-11: checking the values read and saving the document.
+export const REVIEW_MESSAGES = {
+  verify: "Verifică",
+  corrected: "Corectat",
+  confirm: "E corect",
+  products: "PRODUSE",
+  addProduct: "Adaugă un produs",
+  deleteProduct: "Șterge",
+  itemsTotal: (amount: string) => `Suma produselor: ${amount}`,
+  totalMatches: "Se potrivește cu totalul de pe bon",
+  totalDiffers: (amount: string) => `Diferență de ${amount} față de total`,
+  save: "Salvează documentul",
+  saveFailedTitle: "Nu am putut salva documentul",
+  saveFailed: "Verifică datele și încearcă din nou.",
+  photo: "Poza documentului",
+  futureDate: "Data nu poate fi în viitor.",
+  futureTime: "Ora nu poate fi în viitor.",
+  invalidAmount: "Introdu o sumă cu cel mult două zecimale.",
+  blockedToCheck: (count: number) =>
+    count === 1 ? "Mai ai o valoare de verificat." : `Mai ai ${count} valori de verificat.`,
+  blockedNoProducts: "Adaugă cel puțin un produs.",
+  blockedAmount: "Suma unui produs nu este validă.",
+  blockedTotal: "Produsele nu se potrivesc cu totalul de pe bon.",
+  blockedFields: (fields: string) => `Completează corect: ${fields}.`,
+  done: "Gata",
+};
+
+// US-14: importing a picture or a PDF that is already on the phone.
+export const IMPORT_MESSAGES = {
+  gallery: "Din galerie",
+  files: "Din fișiere",
+  failedTitle: "Nu am putut trimite documentul",
+  failed: "Verifică conexiunea și încearcă din nou.",
+  failedReasons: {
+    FILE_TOO_LARGE: "Fișierul este prea mare. Alege unul de cel mult 10 MB.",
+    UNREADABLE_PDF: "PDF-ul nu a putut fi deschis. Alege alt fișier.",
+    UNSUPPORTED_FILE_TYPE: "Alege o poză sau un PDF.",
+  } as Record<string, string>,
+  unsupportedTitle: "Fișier nepotrivit",
+  unsupported: "Alege o poză sau un PDF.",
 };

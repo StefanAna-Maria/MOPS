@@ -26,7 +26,9 @@ import {
   type Rect,
   type Size,
 } from "@/lib/crop-frame";
-import { SCAN_MESSAGES } from "@/lib/expense-messages";
+import { ImportButton } from "@/components/import-button";
+import { IMPORT_MESSAGES, SCAN_MESSAGES } from "@/lib/expense-messages";
+import { useImportDocument } from "@/lib/use-import-document";
 import { useProfile } from "@/lib/profile-context";
 import { uploadScan } from "@/lib/scan-upload";
 import { colors, radius, spacing, typography } from "@/constants/theme";
@@ -41,6 +43,7 @@ export default function ScanScreen() {
   const cameraRef = useRef<CameraView>(null);
 
   const { activeContext } = useProfile();
+  const { importing, importFromGallery, importFromFiles } = useImportDocument();
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [isTakingPicture, setIsTakingPicture] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -120,6 +123,20 @@ export default function ScanScreen() {
                   }}
                 />
               )}
+              <PrimaryButton
+                title={IMPORT_MESSAGES.gallery}
+                variant="outline"
+                onPress={() => void importFromGallery()}
+                loading={importing === "gallery"}
+                disabled={importing !== null}
+              />
+              <PrimaryButton
+                title={IMPORT_MESSAGES.files}
+                variant="outline"
+                onPress={() => void importFromFiles()}
+                loading={importing === "files"}
+                disabled={importing !== null}
+              />
               <PrimaryButton title="Înapoi" variant="outline" onPress={() => router.back()} />
             </View>
           </Card>
@@ -293,11 +310,20 @@ export default function ScanScreen() {
         </View>
 
         <View style={styles.shutterBar}>
+          <View style={styles.shutterSide}>
+            <ImportButton
+              title={IMPORT_MESSAGES.gallery}
+              icon="images-outline"
+              onPress={() => void importFromGallery()}
+              loading={importing === "gallery"}
+              disabled={importing !== null || isTakingPicture}
+            />
+          </View>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Declanșator"
-            accessibilityState={{ disabled: isTakingPicture }}
-            disabled={isTakingPicture}
+            accessibilityState={{ disabled: isTakingPicture || importing !== null }}
+            disabled={isTakingPicture || importing !== null}
             onPress={() => {
               void handleTakePicture();
             }}
@@ -310,6 +336,15 @@ export default function ScanScreen() {
           >
             <View style={styles.shutterInner} />
           </Pressable>
+          <View style={styles.shutterSide}>
+            <ImportButton
+              title={IMPORT_MESSAGES.files}
+              icon="document-outline"
+              onPress={() => void importFromFiles()}
+              loading={importing === "files"}
+              disabled={importing !== null || isTakingPicture}
+            />
+          </View>
         </View>
       </SafeAreaView>
     </View>
@@ -448,9 +483,15 @@ const styles = StyleSheet.create({
     color: colors.white,
   },
   shutterBar: {
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: spacing.lg,
     paddingVertical: spacing.xl,
+  },
+  shutterSide: {
+    flex: 1,
+    alignItems: "center",
   },
   shutterOuter: {
     width: 76,

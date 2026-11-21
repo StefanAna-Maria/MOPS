@@ -12,3 +12,11 @@ jest.mock("expo-router", () => {
       React.createElement(Text, { accessibilityRole: "link", accessibilityHint: String(href), style }, children),
   };
 });
+
+jest.mock("@react-native-community/datetimepicker", () => {
+  const React = require("react");
+  const { View } = require("react-native");
+  const DateTimePicker = (props: Record<string, unknown>) =>
+    React.createElement(View, { testID: "date-time-picker", ...props });
+  return { __esModule: true, default: DateTimePicker, DateTimePickerAndroid: { open: jest.fn() } };
+});

@@ -3,7 +3,9 @@ import app from "../src/index.js";
 import { prisma } from "../src/lib/prisma.js";
 import { OcrError, readReceipt } from "../src/lib/ocr-client.js";
 import { stageFromPartialOutput, waitForScan } from "../src/lib/scan-processor.js";
+import { detectImageType } from "../src/lib/uploads.js";
 import { createSignedInUser, get, resetDatabase, send } from "./helpers.js";
+import { makePdf, pngSize } from "./pdf-fixture.js";
 
 vi.mock("../src/lib/ocr-client.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../src/lib/ocr-client.js")>();
@@ -114,7 +116,8 @@ describe("POST /api/scans", () => {
 
   it.each([
     ["no file", { omitFile: true }, 400, "FILE_REQUIRED"],
-    ["a PDF", { bytes: new TextEncoder().encode("%PDF-1.7 ..."), type: "application/pdf", name: "bon.pdf" }, 415, "UNSUPPORTED_FILE_TYPE"],
+    ["a PDF that cannot be opened", { bytes: new TextEncoder().encode("%PDF-1.7 ..."), type: "application/pdf", name: "bon.pdf" }, 422, "UNREADABLE_PDF"],
+    ["a text file", { bytes: new TextEncoder().encode("hello"), type: "text/plain", name: "notite.txt" }, 415, "UNSUPPORTED_FILE_TYPE"],
     ["text pretending to be a JPEG", { bytes: new TextEncoder().encode("not an image"), type: "image/jpeg" }, 415, "UNSUPPORTED_FILE_TYPE"],
     ["an empty file", { bytes: new Uint8Array() }, 413, "FILE_TOO_LARGE"],
     ["a file over 10 MB", { bytes: new Uint8Array(10 * 1024 * 1024 + 1) }, 413, "FILE_TOO_LARGE"],
@@ -154,6 +157,119 @@ describe("POST /api/scans", () => {
     const file = await prisma.file.findUniqueOrThrow({ where: { id: scan.id } });
     expect(file.mimeType).toBe("image/jpeg");
     expect(file.storageKey).toMatch(/\.jpg$/);
+  });
+});
+
+describe("POST /api/scans with a PDF (US-14)", () => {
+  it("CA-14.1: accepts a PDF", async () => {
+    const { cookie } = await createSignedInUser();
+
+    const response = await upload(cookie, { bytes: makePdf(), type: "application/pdf", name: "factura.pdf" });
+
+    expect(response.status).toBe(202);
+  });
+
+  it("CA-14.1: accepts a PDF whatever type the phone declares", async () => {
+    const { cookie } = await createSignedInUser();
+
+    const response = await upload(cookie, { bytes: makePdf(), type: "application/octet-stream", name: "document" });
+
+    expect(response.status).toBe(202);
+  });
+
+  it("CA-14.2: keeps the first page as a PNG picture and the PDF's name", async () => {
+    const { cookie } = await createSignedInUser();
+
+    const response = await upload(cookie, { bytes: makePdf(), type: "application/pdf", name: "factura.pdf" });
+
+    const { scan } = await response.json();
+    const file = await prisma.file.findUniqueOrThrow({ where: { id: scan.id } });
+    expect(file).toMatchObject({ mimeType: "image/png", originalName: "factura.pdf" });
+    expect(file.storageKey).toMatch(/\.png$/);
+    const image = await get(`/api/scans/${scan.id}/image`, { cookie });
+    expect(image.headers.get("Content-Type")).toBe("image/png");
+    const stored = new Uint8Array(await image.arrayBuffer());
+    expect(detectImageType(stored)).toBe("image/png");
+    expect(file.size).toBe(stored.length);
+  });
+
+  it("keeps the real file name when the app sends it percent-encoded", async () => {
+    const { cookie } = await createSignedInUser();
+
+    const response = await upload(cookie, { bytes: makePdf(), type: "application/pdf", name: "Factur%C4%83%20nr%201.pdf" });
+
+    const { scan } = await response.json();
+    const file = await prisma.file.findUniqueOrThrow({ where: { id: scan.id } });
+    expect(file.originalName).toBe("Factură nr 1.pdf");
+  });
+
+  it("keeps a file name that is not valid percent-encoding as it is", async () => {
+    const { cookie } = await createSignedInUser();
+
+    const response = await upload(cookie, { bytes: makePdf(), type: "application/pdf", name: "100%.pdf" });
+
+    const { scan } = await response.json();
+    const file = await prisma.file.findUniqueOrThrow({ where: { id: scan.id } });
+    expect(file.originalName).toBe("100%.pdf");
+  });
+
+  it("CA-14.2: the PDF goes straight to reading: the OCR service gets the picture of the page", async () => {
+    const { cookie } = await createSignedInUser();
+
+    const { scan } = await uploadAndRead(cookie, { bytes: makePdf(), type: "application/pdf", name: "factura.pdf" });
+
+    expect(scan.status).toBe("DONE");
+    expect(scan.reading.total.value).toBe("26.17");
+    expect(readReceiptMock).toHaveBeenCalledTimes(1);
+    const [bytes, mimeType] = readReceiptMock.mock.calls[0];
+    expect(mimeType).toBe("image/png");
+    expect(detectImageType(bytes)).toBe("image/png");
+    expect(pngSize(bytes).height).toBe(2048);
+  });
+
+  it("CA-14.2: a PDF is saved in the selected profile like a photo", async () => {
+    const withCompany = await createSignedInUser();
+    await send("POST", "/api/company", { cui: "RO 14399840", name: "Exemplu SRL", address: "Str. 1" }, {
+      cookie: withCompany.cookie,
+    });
+
+    const response = await upload(withCompany.cookie, { bytes: makePdf(), type: "application/pdf", context: "company" });
+
+    expect((await response.json()).scan.context).toBe("company");
+  });
+
+  it("CA-14.2: a damaged PDF is refused with UNREADABLE_PDF and nothing is saved or read", async () => {
+    const { cookie } = await createSignedInUser();
+
+    const response = await upload(cookie, { bytes: makePdf().slice(0, 40), type: "application/pdf", name: "stricat.pdf" });
+
+    expect(response.status).toBe(422);
+    expect((await response.json()).code).toBe("UNREADABLE_PDF");
+    expect(await prisma.file.count()).toBe(0);
+    expect(readReceiptMock).not.toHaveBeenCalled();
+  });
+
+  it("a PDF over 10 MB is refused with FILE_TOO_LARGE", async () => {
+    const { cookie } = await createSignedInUser();
+    const big = new Uint8Array(10 * 1024 * 1024 + 1);
+    big.set(makePdf());
+
+    const response = await upload(cookie, { bytes: big, type: "application/pdf", name: "mare.pdf" });
+
+    expect(response.status).toBe(413);
+    expect(await prisma.file.count()).toBe(0);
+  });
+
+  it("CA-14.1: a picture from the gallery or the files (PNG, WebP) is accepted like a photo", async () => {
+    const { cookie } = await createSignedInUser();
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]);
+    const webp = new Uint8Array([0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x45, 0x42, 0x50]);
+
+    const pngResponse = await upload(cookie, { bytes: png, type: "image/png", name: "bon.png" });
+    const webpResponse = await upload(cookie, { bytes: webp, type: "image/webp", name: "bon.webp" });
+
+    expect(pngResponse.status).toBe(202);
+    expect(webpResponse.status).toBe(202);
   });
 });
 
@@ -320,7 +436,7 @@ describe("CA-10.1 & CA-10.2: stages and POST /api/scans/:id/retry", () => {
     const { scan: initial } = await (await upload(cookie)).json();
     expect(initial).toMatchObject({ status: "PROCESSING", stage: "READING" });
 
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await vi.waitFor(() => expect(emitProgress).toBeDefined(), { timeout: 10_000 });
     emitProgress?.('{"merchant": {"value": "Carrefour"}');
     const midFields = (await (await get(`/api/scans/${initial.id}`, { cookie })).json()).scan;
     expect(midFields).toMatchObject({ status: "PROCESSING", stage: "EXTRACTING_FIELDS" });

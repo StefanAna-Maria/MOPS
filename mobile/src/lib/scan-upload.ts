@@ -20,6 +20,11 @@ export class ScanUploadError extends Error {
   }
 }
 
+function pdfFileName(name: string | undefined) {
+  const trimmed = name?.trim();
+  return trimmed ? trimmed : "document.pdf";
+}
+
 /** Returns a JPEG of the photo no larger than MAX_SCAN_SIDE on its long side. */
 export async function prepareScanImage(uri: string): Promise<string> {
   const probe = ImageManipulator.manipulate(uri);
@@ -43,12 +48,18 @@ export async function prepareScanImage(uri: string): Promise<string> {
  * CA-09.1: uploads the receipt photo to the server, which starts reading it with the OCR service. Resolves with the
  * scan (status PROCESSING); poll GET /api/scans/:id for the result. Throws ScanUploadError, or a network error.
  */
-export async function uploadScan(photoUri: string, context: DocumentContext): Promise<Scan> {
-  const prepared = await prepareScanImage(photoUri);
+export async function uploadScan(
+  photoUri: string,
+  context: DocumentContext,
+  options: { kind?: "image" | "pdf"; name?: string } = {},
+): Promise<Scan> {
+  // US-14: a PDF goes up as it is (the server turns its first page into a picture); a picture is shrunk first.
+  const isPdf = options.kind === "pdf";
+  const prepared = isPdf ? photoUri : await prepareScanImage(photoUri);
   const form = new FormData();
   // Expo's fetch (SDK 58) only sends real Blobs; React Native's old { uri, name, type } object makes it throw
   // "Unsupported FormDataPart implementation". expo-file-system's File implements Blob.
-  form.append("file", new File(prepared) as unknown as Blob, "receipt.jpg");
+  form.append("file", new File(prepared) as unknown as Blob, isPdf ? pdfFileName(options.name) : "receipt.jpg");
   form.append("context", context);
 
   const response = await apiFetch("/api/scans", { method: "POST", body: form }, { timeoutMs: UPLOAD_TIMEOUT });

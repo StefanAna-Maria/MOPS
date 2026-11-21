@@ -95,6 +95,44 @@ describe("uploadScan", () => {
     expect(options.timeoutMs).toBeGreaterThan(10_000);
   });
 
+  it("CA-14.2: uploads a PDF as it is, without shrinking it, under its own name", async () => {
+    const appendSpy = jest.spyOn(FormData.prototype, "append");
+    apiFetchMock.mockResolvedValue({
+      ok: true,
+      status: 202,
+      json: async () => ({ scan: { id: "scan-2", status: "PROCESSING" } }),
+    });
+
+    const scan = await uploadScan("file:///cache/factura.pdf", "personal", { kind: "pdf", name: "factura.pdf" });
+
+    expect(scan).toEqual({ id: "scan-2", status: "PROCESSING" });
+    expect(manipulateMock).not.toHaveBeenCalled();
+    const [, part, fileName] = appendSpy.mock.calls.find(([name]) => name === "file") ?? [];
+    expect(part).toMatchObject({ uri: "file:///cache/factura.pdf" });
+    expect(part).toBeInstanceOf(Blob);
+    expect(fileName).toBe("factura.pdf");
+    expect(appendSpy).toHaveBeenCalledWith("context", "personal");
+  });
+
+  it("CA-14.2: a PDF without a name is sent as document.pdf", async () => {
+    const appendSpy = jest.spyOn(FormData.prototype, "append");
+    apiFetchMock.mockResolvedValue({ ok: true, status: 202, json: async () => ({ scan: { id: "s" } }) });
+
+    await uploadScan("file:///cache/x", "personal", { kind: "pdf" });
+
+    const [, , fileName] = appendSpy.mock.calls.find(([name]) => name === "file") ?? [];
+    expect(fileName).toBe("document.pdf");
+  });
+
+  it("CA-14.2: a picture from the gallery is shrunk like a photo", async () => {
+    apiFetchMock.mockResolvedValue({ ok: true, status: 202, json: async () => ({ scan: { id: "s" } }) });
+    photoOfSize(4032, 3024);
+
+    await uploadScan("file:///cache/IMG_1.jpg", "personal", { kind: "image", name: "IMG_1.jpg" });
+
+    expect(mockResize).toHaveBeenCalledWith({ width: MAX_SCAN_SIDE });
+  });
+
   it("throws ScanUploadError with the server's code when the upload is refused", async () => {
     apiFetchMock.mockResolvedValue({ ok: false, status: 413, json: async () => ({ code: "FILE_TOO_LARGE" }) });
 

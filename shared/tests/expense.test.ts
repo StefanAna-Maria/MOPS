@@ -8,6 +8,7 @@ import {
   monthBounds,
   parseAmount,
   parseDisplayDate,
+  timeInTimeZone,
   todayInTimeZone,
   validateManualExpense,
 } from "../src/expense.js";
@@ -136,5 +137,13 @@ describe("monthBounds", () => {
     expect(monthBounds("2026-11-14")).toEqual({ start: "2026-11-01", end: "2026-12-01" });
     expect(monthBounds("2026-12-31")).toEqual({ start: "2026-12-01", end: "2027-01-01" });
     expect(monthBounds("2026-01-01")).toEqual({ start: "2026-01-01", end: "2026-02-01" });
+  });
+});
+
+describe("timeInTimeZone", () => {
+  it("gives the current time in the phone's time zone, 24h", () => {
+    const now = new Date("2026-11-21T12:05:00Z");
+    expect(timeInTimeZone("Europe/Bucharest", now)).toBe("14:05");
+    expect(timeInTimeZone("UTC", new Date("2026-11-21T00:07:00Z"))).toBe("00:07");
   });
 });

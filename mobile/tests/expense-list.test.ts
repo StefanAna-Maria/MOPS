@@ -13,6 +13,7 @@ function doc(id: string, date: string, total: string, extra: Partial<ExpenseDocu
     category: "GROCERIES",
     paymentMethod: "CASH",
     note: null,
+    fileId: null,
     createdAt: `${date}T10:00:00.000Z`,
     lines: [],
     ...extra,

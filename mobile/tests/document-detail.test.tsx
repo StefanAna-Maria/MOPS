@@ -6,6 +6,7 @@ import { apiFetch } from "@/lib/api";
 import { DOCUMENT_MESSAGES, HOME_MESSAGES } from "@/lib/expense-messages";
 
 jest.mock("@/lib/api", () => ({ apiFetch: jest.fn() }));
+jest.mock("@/lib/auth-client", () => ({ authClient: { getCookie: jest.fn(async () => "session=abc") } }));
 
 const apiFetchMock = apiFetch as unknown as jest.Mock;
 const paramsMock = useLocalSearchParams as unknown as jest.Mock;
@@ -21,6 +22,7 @@ const document: ExpenseDocument = {
   category: "HEALTH",
   paymentMethod: "TRANSFER",
   note: "rețetă compensată",
+  fileId: null,
   createdAt: "2026-11-05T10:00:00.000Z",
   lines: [{ id: "l1", position: 1, name: "Farmacia Tei", amount: "1234.50", category: "HEALTH" }],
 };

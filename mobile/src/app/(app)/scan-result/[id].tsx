@@ -4,20 +4,15 @@ import { router, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import {
-  EXPENSE_CATEGORY_LABELS,
-  LOW_CONFIDENCE,
-  PAYMENT_METHOD_LABELS,
   SCAN_STAGES,
   SCAN_STAGE_LABELS,
-  formatDisplayDate,
-  type OcrField,
   type OcrReading,
   type Scan,
   type ScanErrorCode,
   type ScanStage,
 } from "@ocrinvoice/shared";
 import { PrimaryButton } from "@/components/primary-button";
-import { amountToCents, formatLei } from "@/lib/expense-list";
+import { ScanReview } from "@/components/scan-review";
 import { SCAN_MESSAGES } from "@/lib/expense-messages";
 import { POLL_INTERVAL_MS, ScanUploadError, fetchScan, retryScan } from "@/lib/scan-upload";
 import { colors, elevation, radius, spacing, typography } from "@/constants/theme";
@@ -27,46 +22,30 @@ type ScreenState =
   | { status: "done"; reading: OcrReading }
   | { status: "failed"; errorCode: ScanErrorCode | "NOT_FOUND" | "NETWORK" };
 
+/**
+ * CA-10.1: the stage shown while reading. The server reports the real stage; the elapsed time is only a fallback for a
+ * server that sends none. The stages never go back: reading the photo can take long before the model writes anything,
+ * and a guessed later stage followed by the real, earlier one made the list jump back and forth.
+ */
 export function resolveActiveStage(
   serverStage: ScanStage | null | undefined,
   elapsedSeconds: number,
+  previousStage?: ScanStage,
 ): ScanStage {
-  if (
-    serverStage === "UPLOADING" ||
-    serverStage === "EXTRACTING_FIELDS" ||
-    serverStage === "EXTRACTING_ITEMS"
-  ) {
-    return serverStage;
+  let stage: ScanStage;
+  if (serverStage) {
+    stage = serverStage;
+  } else if (elapsedSeconds >= 8) {
+    stage = "EXTRACTING_ITEMS";
+  } else if (elapsedSeconds >= 4) {
+    stage = "EXTRACTING_FIELDS";
+  } else {
+    stage = "READING";
   }
-  if (elapsedSeconds >= 8) {
-    return "EXTRACTING_ITEMS";
+  if (previousStage && SCAN_STAGES.indexOf(previousStage) > SCAN_STAGES.indexOf(stage)) {
+    return previousStage;
   }
-  if (elapsedSeconds >= 4) {
-    return "EXTRACTING_FIELDS";
-  }
-  return "READING";
-}
-
-function percent(confidence: number) {
-  return `${Math.round(confidence * 100)}%`;
-}
-
-function ReadValue<T>({ label, field, format }: { label: string; field: OcrField<T>; format: (value: T) => string }) {
-  const low = field.confidence < LOW_CONFIDENCE;
-  return (
-    <View style={styles.row}>
-      <Text style={styles.rowLabel}>{label}</Text>
-      <View style={styles.rowRight}>
-        <Text style={styles.rowValue}>{field.value === null ? "—" : format(field.value)}</Text>
-        <Text
-          style={[styles.confidence, low && styles.confidenceLow]}
-          accessibilityLabel={`Siguranță ${percent(field.confidence)}`}
-        >
-          {percent(field.confidence)}
-        </Text>
-      </View>
-    </View>
-  );
+  return stage;
 }
 
 function ReadingStages({ activeStage, elapsedSeconds }: { activeStage: ScanStage; elapsedSeconds: number }) {
@@ -141,51 +120,10 @@ function ReadingStages({ activeStage, elapsedSeconds }: { activeStage: ScanStage
   );
 }
 
-function ReadingView({ reading }: { reading: OcrReading }) {
-  const lei = (amount: string) => formatLei(amountToCents(amount));
-  return (
-    <>
-      <View style={styles.card}>
-        <ReadValue label="Magazin" field={reading.merchant} format={(v) => v} />
-        <ReadValue label="Data" field={reading.date} format={formatDisplayDate} />
-        <ReadValue label="Ora" field={reading.time} format={(v) => v} />
-        <ReadValue label="Total" field={reading.total} format={lei} />
-        <ReadValue label="Plată" field={reading.paymentMethod} format={(v) => PAYMENT_METHOD_LABELS[v]} />
-      </View>
-
-      <Text style={styles.sectionTitle}>PRODUSE</Text>
-      <View style={styles.card}>
-        {reading.items.length === 0 ? <Text style={styles.empty}>Niciun produs găsit.</Text> : null}
-        {reading.items.map((item, index) => (
-          <View key={index} style={[styles.item, index > 0 && styles.itemDivider]}>
-            <View style={styles.itemTexts}>
-              <Text style={styles.itemName}>{item.name.value}</Text>
-              <Text style={styles.itemMeta}>
-                {item.quantity.value ?? 1} × {item.category.value ? EXPENSE_CATEGORY_LABELS[item.category.value] : "—"}
-              </Text>
-            </View>
-            <View style={styles.itemRight}>
-              <Text style={styles.itemAmount}>{item.amount.value === null ? "—" : lei(item.amount.value)}</Text>
-              <Text style={[styles.confidence, item.amount.confidence < LOW_CONFIDENCE && styles.confidenceLow]}>
-                {percent(item.amount.confidence)}
-              </Text>
-            </View>
-          </View>
-        ))}
-      </View>
-
-      <Text style={[styles.check, reading.totalMatches ? styles.checkOk : styles.checkWarn]}>
-        {reading.totalMatches
-          ? SCAN_MESSAGES.totalMatches
-          : `${SCAN_MESSAGES.totalDiffers} (${lei(reading.itemsTotal)}).`}
-      </Text>
-    </>
-  );
-}
-
 /**
- * US-09 / US-10: waits for the server to read the uploaded photo, shows the real reading stages (CA-10.1),
- * handles OCR / unreadable errors with retry (CA-10.2), and shows what was read with the confidence of each value.
+ * US-09 / US-10: waits for the server to read the uploaded photo, shows the real reading stages (CA-10.1) and
+ * handles OCR / unreadable errors with retry (CA-10.2). Once it is read, US-11 lets the user check the values and
+ * save the document.
  */
 export default function ScanResultScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -202,6 +140,7 @@ export default function ScanResultScreen() {
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const started = Date.now();
+    let reachedStage: ScanStage | undefined;
 
     async function poll() {
       let scan: Scan | null;
@@ -224,11 +163,8 @@ export default function ScanResultScreen() {
         setState({ status: "failed", errorCode: scan.errorCode ?? "OCR_UNAVAILABLE" });
       } else {
         const elapsedSeconds = Math.round((Date.now() - started) / 1000);
-        setState({
-          status: "processing",
-          stage: resolveActiveStage(scan.stage, elapsedSeconds),
-          elapsedSeconds,
-        });
+        reachedStage = resolveActiveStage(scan.stage, elapsedSeconds, reachedStage);
+        setState({ status: "processing", stage: reachedStage, elapsedSeconds });
         timer = setTimeout(poll, POLL_INTERVAL_MS);
       }
     }
@@ -300,7 +236,7 @@ export default function ScanResultScreen() {
           </View>
         ) : null}
 
-        {state.status === "done" ? <ReadingView reading={state.reading} /> : null}
+        {state.status === "done" ? <ScanReview scanId={scanId} reading={state.reading} /> : null}
 
         {state.status !== "failed" ? (
           <PrimaryButton title={SCAN_MESSAGES.home} variant="outline" onPress={() => router.replace("/")} />
@@ -484,91 +420,8 @@ const styles = StyleSheet.create({
     borderRadius: radius.base,
     paddingHorizontal: spacing.lg,
   },
-  row: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    gap: spacing.lg,
-    paddingVertical: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  rowLabel: {
-    ...typography.bodyMd,
-    color: colors.textSecondary,
-  },
-  rowRight: {
-    flexDirection: "row",
-    alignItems: "baseline",
-    gap: spacing.sm,
-    flexShrink: 1,
-  },
-  rowValue: {
-    ...typography.label,
-    flexShrink: 1,
-    textAlign: "right",
-    color: colors.textPrimary,
-  },
-  confidence: {
-    fontFamily: Platform.select({ ios: "Menlo", default: "monospace" }),
-    fontSize: 11,
-    color: colors.successText,
-  },
-  confidenceLow: {
-    color: "#92400E",
-  },
-  sectionTitle: {
-    ...typography.label,
-    fontSize: 12,
-    letterSpacing: 0.6,
-    marginBottom: -spacing.sm,
-    color: colors.textSecondary,
-  },
-  empty: {
-    ...typography.bodyMd,
-    paddingVertical: spacing.md,
-    color: colors.textSecondary,
-  },
-  item: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: spacing.md,
-    paddingVertical: spacing.md,
-  },
   itemDivider: {
     borderTopWidth: 1,
     borderTopColor: colors.border,
-  },
-  itemTexts: {
-    flex: 1,
-    gap: 2,
-  },
-  itemName: {
-    ...typography.bodyMd,
-    color: colors.textPrimary,
-  },
-  itemMeta: {
-    ...typography.bodySm,
-    color: colors.textSecondary,
-  },
-  itemRight: {
-    flexDirection: "row",
-    alignItems: "baseline",
-    gap: spacing.sm,
-  },
-  itemAmount: {
-    ...typography.label,
-    color: colors.textPrimary,
-    fontVariant: ["tabular-nums"],
-  },
-  check: {
-    ...typography.bodyMd,
-    textAlign: "center",
-  },
-  checkOk: {
-    color: colors.successText,
-  },
-  checkWarn: {
-    color: "#92400E",
   },
 });

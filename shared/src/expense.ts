@@ -43,12 +43,13 @@ export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
 
 export const DEFAULT_PAYMENT_METHOD: PaymentMethod = "CASH";
 
-export const DOCUMENT_TYPES = ["MANUAL"] as const;
+export const DOCUMENT_TYPES = ["MANUAL", "SCANNED"] as const;
 
 export type DocumentType = (typeof DOCUMENT_TYPES)[number];
 
 export const DOCUMENT_TYPE_LABELS: Record<DocumentType, string> = {
   MANUAL: "Cheltuială manuală",
+  SCANNED: "Bon scanat",
 };
 
 export function isExpenseCategory(value: unknown): value is ExpenseCategory {
@@ -134,6 +135,18 @@ export function todayInTimeZone(timeZone: string, now: Date = new Date()): strin
   }).formatToParts(now);
   const part = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
   return `${part("year")}-${part("month")}-${part("day")}`;
+}
+
+/** The current time ("14:05") in the given time zone. */
+export function timeInTimeZone(timeZone: string, now: Date = new Date()): string {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone,
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(now);
+  const part = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
+  return `${part("hour")}:${part("minute")}`;
 }
 
 /** A payment date is valid when it is a real date and not later than today (ISO dates compare as strings). */
