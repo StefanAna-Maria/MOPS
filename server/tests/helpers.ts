@@ -31,7 +31,12 @@ export function get(path: string, options: RequestOptions = {}) {
   return app.request(path, { method: "GET", headers: headers(options) });
 }
 
-export function send(method: "POST" | "PATCH", path: string, body: unknown, options: RequestOptions = {}) {
+export function send(
+  method: "POST" | "PATCH" | "DELETE",
+  path: string,
+  body: unknown,
+  options: RequestOptions = {},
+) {
   return app.request(path, { method, headers: headers(options), body: JSON.stringify(body) });
 }
 

@@ -1,7 +1,7 @@
 import { ActivityIndicator, Pressable, StyleSheet, Text } from "react-native";
 import { colors, radius, spacing, typography } from "@/constants/theme";
 
-type ButtonVariant = "primary" | "secondary" | "outline";
+type ButtonVariant = "primary" | "secondary" | "outline" | "danger" | "dangerOutline";
 
 type PrimaryButtonProps = {
   title: string;
@@ -13,7 +13,8 @@ type PrimaryButtonProps = {
 
 export function PrimaryButton({ title, onPress, disabled, loading, variant = "primary" }: PrimaryButtonProps) {
   const isDisabled = disabled || loading;
-  const textColor = variant === "outline" ? colors.textPrimary : colors.white;
+  const textColor =
+    variant === "outline" ? colors.textPrimary : variant === "dangerOutline" ? colors.error : colors.white;
 
   return (
     <Pressable
@@ -67,6 +68,14 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderWidth: 1.5,
     borderColor: colors.borderStrong,
+  },
+  danger: {
+    backgroundColor: colors.error,
+  },
+  dangerOutline: {
+    backgroundColor: colors.surface,
+    borderWidth: 1.5,
+    borderColor: "#FECACA",
   },
   pressed: {
     opacity: 0.85,
