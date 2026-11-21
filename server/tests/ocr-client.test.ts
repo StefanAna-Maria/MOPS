@@ -69,4 +69,34 @@ describe("readReceipt", () => {
 
     expect(await codeOf(readReceipt(IMAGE, "image/jpeg"))).toBe("UNREADABLE");
   });
+
+  it("CA-10.1: calls onProgress as SSE chunks arrive when the OCR service streams", async () => {
+    const chunks = [
+      'data: {"model":"qwen3-vl-4b","choices":[{"delta":{"content":"{\\"merchant\\": {\\"value\\": \\"Mega\\"},"}}]}\n\n',
+      'data: {"choices":[{"delta":{"content":"\\"items\\": []}"}}]}\n\n',
+      "data: [DONE]\n\n",
+    ];
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        const encoder = new TextEncoder();
+        for (const chunk of chunks) {
+          controller.enqueue(encoder.encode(chunk));
+        }
+        controller.close();
+      },
+    });
+    fetchMock.mockResolvedValue(
+      new Response(stream, { status: 200, headers: { "Content-Type": "text/event-stream" } }),
+    );
+
+    const progressUpdates: string[] = [];
+    const answer = await readReceipt(IMAGE, "image/jpeg", (partial) => progressUpdates.push(partial));
+
+    expect(answer.raw).toBe('{"merchant": {"value": "Mega"},"items": []}');
+    expect(answer.model).toBe("qwen3-vl-4b");
+    expect(progressUpdates).toEqual([
+      '{"merchant": {"value": "Mega"},',
+      '{"merchant": {"value": "Mega"},"items": []}',
+    ]);
+  });
 });

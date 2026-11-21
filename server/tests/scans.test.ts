@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import app from "../src/index.js";
 import { prisma } from "../src/lib/prisma.js";
 import { OcrError, readReceipt } from "../src/lib/ocr-client.js";
-import { waitForScan } from "../src/lib/scan-processor.js";
+import { stageFromPartialOutput, waitForScan } from "../src/lib/scan-processor.js";
 import { createSignedInUser, get, resetDatabase, send } from "./helpers.js";
 
 vi.mock("../src/lib/ocr-client.js", async (importOriginal) => {
@@ -299,6 +299,71 @@ describe("GET /api/scans/:id/image", () => {
     expect(mine.status).toBe(200);
     expect(mine.headers.get("Content-Type")).toBe("image/jpeg");
     expect(Array.from(new Uint8Array(await mine.arrayBuffer()))).toEqual(Array.from(JPEG));
+    expect(foreign.status).toBe(404);
+  });
+});
+
+describe("CA-10.1 & CA-10.2: stages and POST /api/scans/:id/retry", () => {
+  it("CA-10.1: tracks the real stage of reading (READING → EXTRACTING_FIELDS → EXTRACTING_ITEMS)", async () => {
+    expect(stageFromPartialOutput("{")).toBe("READING");
+    expect(stageFromPartialOutput('{"merchant": {"value": "Mega Image"')).toBe("EXTRACTING_FIELDS");
+    expect(stageFromPartialOutput('{"merchant": {"value": "Mega"}, "items": [')).toBe("EXTRACTING_ITEMS");
+
+    let emitProgress: ((partial: string) => void) | undefined;
+    const { answer, release } = slowOcr();
+    readReceiptMock.mockImplementation((_bytes, _mime, onProgress) => {
+      emitProgress = onProgress;
+      return answer;
+    });
+
+    const { cookie } = await createSignedInUser();
+    const { scan: initial } = await (await upload(cookie)).json();
+    expect(initial).toMatchObject({ status: "PROCESSING", stage: "READING" });
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    emitProgress?.('{"merchant": {"value": "Carrefour"}');
+    const midFields = (await (await get(`/api/scans/${initial.id}`, { cookie })).json()).scan;
+    expect(midFields).toMatchObject({ status: "PROCESSING", stage: "EXTRACTING_FIELDS" });
+
+    emitProgress?.('{"merchant": {"value": "Carrefour"}, "items": [');
+    const midItems = (await (await get(`/api/scans/${initial.id}`, { cookie })).json()).scan;
+    expect(midItems).toMatchObject({ status: "PROCESSING", stage: "EXTRACTING_ITEMS" });
+
+    release();
+    await waitForScan(initial.id);
+    const done = (await (await get(`/api/scans/${initial.id}`, { cookie })).json()).scan;
+    expect(done).toMatchObject({ status: "DONE", stage: null });
+  });
+
+  it("CA-10.2: POST /api/scans/:id/retry restarts a failed scan and completes once OCR is back up", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    readReceiptMock.mockRejectedValueOnce(new OcrError("OCR_UNAVAILABLE", "down"));
+    const { cookie } = await createSignedInUser();
+
+    const { scan: failed } = await uploadAndRead(cookie);
+    expect(failed).toMatchObject({ status: "FAILED", errorCode: "OCR_UNAVAILABLE" });
+
+    readReceiptMock.mockResolvedValueOnce({ raw: CARREFOUR_ANSWER, model: "qwen3-vl-4b", durationMs: 12000 });
+    const retryResponse = await send("POST", `/api/scans/${failed.id}/retry`, {}, { cookie });
+    expect(retryResponse.status).toBe(202);
+    const { scan: restarted } = await retryResponse.json();
+    expect(restarted).toMatchObject({ status: "PROCESSING", stage: "READING", errorCode: null });
+
+    await waitForScan(failed.id);
+    const afterRetry = (await (await get(`/api/scans/${failed.id}`, { cookie })).json()).scan;
+    expect(afterRetry).toMatchObject({ status: "DONE", errorCode: null });
+    expect(afterRetry.reading?.merchant.value).toBe("Carrefour express");
+  });
+
+  it("POST /api/scans/:id/retry returns 404 for a missing scan or another user's scan", async () => {
+    const owner = await createSignedInUser();
+    const { uploaded } = await uploadAndRead(owner.cookie);
+    const other = await createSignedInUser();
+
+    const missing = await send("POST", "/api/scans/does-not-exist/retry", {}, { cookie: owner.cookie });
+    const foreign = await send("POST", `/api/scans/${uploaded.id}/retry`, {}, { cookie: other.cookie });
+
+    expect(missing.status).toBe(404);
     expect(foreign.status).toBe(404);
   });
 });

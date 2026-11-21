@@ -32,14 +32,10 @@ export function PrimaryButton({ title, onPress, disabled, loading, variant = "pr
       {loading ? (
         <ActivityIndicator color={textColor} />
       ) : (
-        // Button labels stay on one line. Android's default "highQuality" line breaking can wrap the last word of a
-        // short label with a custom font (seen on "Înapoi la Acasă"); "simple" breaking and one line prevent it.
         <Text
           style={[styles.text, { color: textColor }]}
           numberOfLines={1}
           textBreakStrategy="simple"
-          adjustsFontSizeToFit
-          minimumFontScale={0.85}
         >
           {title}
         </Text>
@@ -50,9 +46,11 @@ export function PrimaryButton({ title, onPress, disabled, loading, variant = "pr
 
 const styles = StyleSheet.create({
   button: {
-    height: 48,
+    minHeight: 50,
+    width: "100%",
     borderRadius: radius.base,
     paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -66,9 +64,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.navy,
   },
   outline: {
-    backgroundColor: "transparent",
-    borderWidth: 1,
-    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    borderWidth: 1.5,
+    borderColor: colors.borderStrong,
   },
   pressed: {
     opacity: 0.85,
@@ -78,5 +76,8 @@ const styles = StyleSheet.create({
   },
   text: {
     ...typography.button,
+    lineHeight: 22,
+    width: "100%",
+    textAlign: "center",
   },
 });

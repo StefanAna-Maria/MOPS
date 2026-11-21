@@ -1,3 +1,5 @@
+import { SCAN_STAGE_LABELS } from "@ocrinvoice/shared";
+
 export const EXPENSE_MESSAGES = {
   description: "Scrie magazinul sau o scurtă descriere a plății.",
   amount: "Introdu o sumă mai mare decât 0, cu cel mult două zecimale.",
@@ -15,9 +17,10 @@ export const DOCUMENT_MESSAGES = {
 };
 
 export const SCAN_MESSAGES = {
-  title: "Citim documentul",
+  title: "Citirea bonului",
   doneTitle: "Ce am citit",
-  reading: "Citim documentul…",
+  reading: SCAN_STAGE_LABELS.READING,
+  stages: SCAN_STAGE_LABELS,
   readingHint: "Poate dura până la două minute pentru bonurile lungi.",
   failed: "Documentul nu a putut fi citit.",
   failedReasons: {
@@ -27,6 +30,7 @@ export const SCAN_MESSAGES = {
     NOT_FOUND: "Documentul nu a fost găsit.",
     NETWORK: "Serverul nu răspunde. Verifică conexiunea la internet.",
   },
+  retry: "Încearcă din nou",
   retake: "Fotografiază din nou",
   home: "Înapoi la Acasă",
   totalMatches: "Produsele se potrivesc cu totalul de pe bon.",
