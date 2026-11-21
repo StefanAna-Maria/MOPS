@@ -28,11 +28,63 @@ function ocrTimeoutMs() {
   return Number.isFinite(value) && value > 0 ? value : 300_000;
 }
 
+async function readEventStream(
+  body: ReadableStream<Uint8Array>,
+  onProgress?: (partialText: string) => void,
+): Promise<{ raw: string; model: string | null }> {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let raw = "";
+  let model: string | null = null;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed.startsWith("data:")) {
+        continue;
+      }
+      const payload = trimmed.slice(5).trim();
+      if (!payload || payload === "[DONE]") {
+        continue;
+      }
+      try {
+        const chunk = JSON.parse(payload) as {
+          model?: string;
+          choices?: { delta?: { content?: string }; message?: { content?: string } }[];
+        };
+        if (chunk.model) {
+          model = chunk.model;
+        }
+        const piece = chunk.choices?.[0]?.delta?.content ?? chunk.choices?.[0]?.message?.content;
+        if (typeof piece === "string" && piece.length > 0) {
+          raw += piece;
+          onProgress?.(raw);
+        }
+      } catch {
+        // Ignore malformed SSE lines and continue reading chunks.
+      }
+    }
+  }
+  return { raw, model };
+}
+
 /**
- * CA-09.1: sends the photo to the OCR microservice (Qwen3-VL on llama.cpp, OpenAI-compatible API) and returns the
- * model's answer. Throws OcrError with OCR_UNAVAILABLE or OCR_TIMEOUT.
+ * CA-09.1 / CA-10.1: sends the photo to the OCR microservice (Qwen3-VL on llama.cpp, OpenAI-compatible API) and
+ * returns the model's answer, calling `onProgress` as partial output arrives. Throws OcrError with OCR_UNAVAILABLE or OCR_TIMEOUT.
  */
-export async function readReceipt(image: Uint8Array, mimeType: string): Promise<OcrAnswer> {
+export async function readReceipt(
+  image: Uint8Array,
+  mimeType: string,
+  onProgress?: (partialText: string) => void,
+): Promise<OcrAnswer> {
   const started = Date.now();
   const dataUrl = `data:${mimeType};base64,${Buffer.from(image).toString("base64")}`;
 
@@ -68,6 +120,15 @@ export async function readReceipt(image: Uint8Array, mimeType: string): Promise<
     throw new OcrError("OCR_UNAVAILABLE", `The OCR service answered HTTP ${response.status}`);
   }
 
+  const contentType = response.headers.get("content-type") ?? "";
+  if (contentType.includes("text/event-stream") && response.body) {
+    const streamed = await readEventStream(response.body, onProgress);
+    if (!streamed.raw) {
+      throw new OcrError("UNREADABLE", "The OCR service returned no text");
+    }
+    return { raw: streamed.raw, model: streamed.model, durationMs: Date.now() - started };
+  }
+
   const data = (await response.json().catch(() => null)) as {
     model?: string;
     choices?: { message?: { content?: string } }[];
@@ -76,5 +137,6 @@ export async function readReceipt(image: Uint8Array, mimeType: string): Promise<
   if (typeof raw !== "string") {
     throw new OcrError("UNREADABLE", "The OCR service returned no text");
   }
+  onProgress?.(raw);
   return { raw, model: data?.model ?? null, durationMs: Date.now() - started };
 }

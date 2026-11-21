@@ -1,3 +1,4 @@
+import type { ScanStage } from "@ocrinvoice/shared";
 import type { Prisma } from "../generated/prisma/client.js";
 import { prisma } from "./prisma.js";
 import { OcrError, readReceipt } from "./ocr-client.js";
@@ -6,6 +7,9 @@ import { readUpload } from "./uploads.js";
 
 /** Readings waiting or running in this server process, so tests (and a graceful shutdown) can wait for them. */
 const running = new Map<string, Promise<void>>();
+
+/** CA-10.1: the real current stage of each active reading. */
+const stages = new Map<string, ScanStage>();
 
 /**
  * Readings are sent to the OCR service one at a time. llama.cpp shares one fixed working memory (its context)
@@ -24,12 +28,39 @@ export function isScanPending(fileId: string) {
   return running.has(fileId);
 }
 
+/** CA-10.1: returns the current stage of a pending scan, or null when not running. */
+export function getScanStage(fileId: string): ScanStage | null {
+  return stages.get(fileId) ?? (running.has(fileId) ? "READING" : null);
+}
+
+/** Updates the active stage of a scan. */
+export function setScanStage(fileId: string, stage: ScanStage) {
+  stages.set(fileId, stage);
+}
+
+/** Determines the active stage from the partial or complete OCR output. */
+export function stageFromPartialOutput(partial: string): ScanStage {
+  if (partial.includes('"items"')) {
+    return "EXTRACTING_ITEMS";
+  }
+  if (partial.includes('"merchant"') || partial.includes('"date"') || partial.includes('"total"')) {
+    return "EXTRACTING_FIELDS";
+  }
+  return "READING";
+}
+
 /**
- * CA-09.1 / CA-09.2: reads one uploaded photo with the OCR service, in the background, and stores the result.
+ * CA-09.1 / CA-09.2 / CA-10.1: reads one uploaded photo with the OCR service, in the background, and stores the result.
  * The upload request does not wait for it (reading takes ~40 s); the app polls GET /api/scans/:id.
  */
 export function startScan(fileId: string, today: string) {
-  const job = queue.then(() => processScan(fileId, today)).finally(() => running.delete(fileId));
+  stages.set(fileId, "READING");
+  const job = queue
+    .then(() => processScan(fileId, today))
+    .finally(() => {
+      running.delete(fileId);
+      stages.delete(fileId);
+    });
   running.set(fileId, job);
   queue = job.catch(() => {});
 }
@@ -39,12 +70,17 @@ async function processScan(fileId: string, today: string) {
   let model: string | null = null;
   let durationMs: number | null = null;
   try {
+    stages.set(fileId, "READING");
     const file = await prisma.file.findUniqueOrThrow({ where: { id: fileId } });
     const image = await readUpload(file.storageKey);
-    const answer = await readReceipt(image, file.mimeType);
+    const answer = await readReceipt(image, file.mimeType, (partialText) => {
+      stages.set(fileId, stageFromPartialOutput(partialText));
+    });
     rawOutput = answer.raw;
     model = answer.model;
     durationMs = answer.durationMs;
+    stages.set(fileId, "EXTRACTING_FIELDS");
+    stages.set(fileId, "EXTRACTING_ITEMS");
     const reading = parseOcrAnswer(answer.raw, today);
     await prisma.ocrResult.update({
       where: { fileId },

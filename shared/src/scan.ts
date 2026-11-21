@@ -10,6 +10,29 @@ export const SCAN_STATUSES = ["PROCESSING", "DONE", "FAILED"] as const;
 export type ScanStatus = (typeof SCAN_STATUSES)[number];
 
 /**
+ * CA-10.1: the real stages of reading a receipt, in order:
+ * - UPLOADING: "Încărcăm documentul"
+ * - READING: "Citim documentul"
+ * - EXTRACTING_FIELDS: "Găsim magazinul, data și totalul"
+ * - EXTRACTING_ITEMS: "Extragem produsele"
+ */
+export const SCAN_STAGES = [
+  "UPLOADING",
+  "READING",
+  "EXTRACTING_FIELDS",
+  "EXTRACTING_ITEMS",
+] as const;
+
+export type ScanStage = (typeof SCAN_STAGES)[number];
+
+export const SCAN_STAGE_LABELS: Record<ScanStage, string> = {
+  UPLOADING: "Încărcăm documentul",
+  READING: "Citim documentul",
+  EXTRACTING_FIELDS: "Găsim magazinul, data și totalul",
+  EXTRACTING_ITEMS: "Extragem produsele",
+};
+
+/**
  * Why a reading failed:
  * - OCR_UNAVAILABLE: the OCR service (llama.cpp) is not running or not reachable;
  * - OCR_TIMEOUT: it took too long;
@@ -60,6 +83,8 @@ export type Scan = {
   id: string;
   context: DocumentContext;
   status: ScanStatus;
+  /** Present when status is PROCESSING: the current real stage of reading (CA-10.1). */
+  stage?: ScanStage | null;
   uploadedAt: string;
   /** Present when status is DONE. */
   reading: OcrReading | null;
