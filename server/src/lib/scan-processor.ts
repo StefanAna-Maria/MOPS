@@ -1,9 +1,10 @@
 import type { ScanStage } from "@ocrinvoice/shared";
 import type { Prisma } from "../generated/prisma/client.js";
 import { prisma } from "./prisma.js";
-import { OcrError, readReceipt } from "./ocr-client.js";
+import { OcrError, readReceipt, readReceiptPages, readReceiptText, type OcrAnswer } from "./ocr-client.js";
+import { extractPdfText, renderPagesAsPng } from "./pdf-render.js";
 import { parseOcrAnswer } from "./ocr-reading.js";
-import { readUpload } from "./uploads.js";
+import { readSourcePdf, readUpload } from "./uploads.js";
 
 /** Readings waiting or running in this server process, so tests (and a graceful shutdown) can wait for them. */
 const running = new Map<string, Promise<void>>();
@@ -72,10 +73,10 @@ async function processScan(fileId: string, today: string) {
   try {
     stages.set(fileId, "READING");
     const file = await prisma.file.findUniqueOrThrow({ where: { id: fileId } });
-    const image = await readUpload(file.storageKey);
-    const answer = await readReceipt(image, file.mimeType, (partialText) => {
+    const onProgress = (partialText: string) => {
       stages.set(fileId, stageFromPartialOutput(partialText));
-    });
+    };
+    const answer = await readUpload(file.storageKey).then((image) => readFile(file.storageKey, image, file.mimeType, onProgress));
     rawOutput = answer.raw;
     model = answer.model;
     durationMs = answer.durationMs;
@@ -102,4 +103,33 @@ async function processScan(fileId: string, today: string) {
       .update({ where: { fileId }, data: { status: "FAILED", errorCode, rawOutput, model, durationMs } })
       .catch((updateError) => console.error(`Could not record the failure of scan ${fileId}`, updateError));
   }
+}
+
+/**
+ * US-09: reads an upload the best way for what it is:
+ * - a PDF with real text (generated invoices): the text of ALL its pages, exactly;
+ * - a PDF without text (a scanned paper document): a picture of each page (up to PDF_MAX_PAGES), read together;
+ * - a photo, or a one-page PDF without text: the picture itself.
+ */
+async function readFile(
+  storageKey: string,
+  image: Uint8Array,
+  mimeType: string,
+  onProgress: (partialText: string) => void,
+): Promise<OcrAnswer> {
+  const pdf = await readSourcePdf(storageKey);
+  if (pdf) {
+    const text = extractPdfText(pdf);
+    if (text) {
+      return readReceiptText(text, onProgress);
+    }
+    const pages = renderPagesAsPng(pdf);
+    if (pages.length > 1) {
+      return readReceiptPages(
+        pages.map((bytes) => ({ bytes, mimeType: "image/png" })),
+        onProgress,
+      );
+    }
+  }
+  return readReceipt(image, mimeType, onProgress);
 }

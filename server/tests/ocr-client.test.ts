@@ -40,6 +40,10 @@ describe("readReceipt", () => {
     expect(url).toBe("http://ocr.test:8080/v1/chat/completions");
     const body = JSON.parse(init.body);
     expect(body.temperature).toBe(0);
+    // Without a progress listener there is nothing to stream to.
+    expect(body.stream).toBe(false);
+    expect(body.cache_prompt).toBe(true);
+    // The photo comes FIRST: with the instructions first the model misread digits on a real phone photo.
     expect(body.messages[0].content).toEqual([
       { type: "image_url", image_url: { url: "data:image/jpeg;base64,AQID" } },
       { type: "text", text: OCR_PROMPT },
@@ -92,6 +96,9 @@ describe("readReceipt", () => {
     const progressUpdates: string[] = [];
     const answer = await readReceipt(IMAGE, "image/jpeg", (partial) => progressUpdates.push(partial));
 
+    // Regression (2026-11-21): the request must ask llama.cpp to stream, otherwise it answers all at once and the
+    // stage never leaves READING on a real phone (this test's fake server streams regardless of what was asked).
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).stream).toBe(true);
     expect(answer.raw).toBe('{"merchant": {"value": "Mega"},"items": []}');
     expect(answer.model).toBe("qwen3-vl-4b");
     expect(progressUpdates).toEqual([

@@ -1,5 +1,5 @@
 import type { ScanErrorCode } from "@ocrinvoice/shared";
-import { OCR_PROMPT } from "./ocr-prompt.js";
+import { OCR_ANSWER_NOW, OCR_PROMPT } from "./ocr-prompt.js";
 
 /** A failed reading, with the code shown to the app (see SCAN_ERROR_CODES). */
 export class OcrError extends Error {
@@ -76,17 +76,64 @@ async function readEventStream(
   return { raw, model };
 }
 
+type ContentPart = { type: "image_url"; image_url: { url: string } } | { type: "text"; text: string };
+
+function imagePart(image: Uint8Array, mimeType: string): ContentPart {
+  return { type: "image_url", image_url: { url: `data:${mimeType};base64,${Buffer.from(image).toString("base64")}` } };
+}
+
+/** PDF text sent to the model is cut at this length (an invoice page is ~2,000 characters). */
+const MAX_PDF_TEXT_CHARS = 16_000;
+
 /**
  * CA-09.1 / CA-10.1: sends the photo to the OCR microservice (Qwen3-VL on llama.cpp, OpenAI-compatible API) and
  * returns the model's answer, calling `onProgress` as partial output arrives. Throws OcrError with OCR_UNAVAILABLE or OCR_TIMEOUT.
  */
-export async function readReceipt(
+export function readReceipt(
   image: Uint8Array,
   mimeType: string,
   onProgress?: (partialText: string) => void,
 ): Promise<OcrAnswer> {
+  // Photo FIRST, then the instructions: with the instructions first (to reuse them from llama.cpp's cache) the model
+  // misread digits on a real phone photo (16,69 for 16,99; 2,85 for 6,79) in 2 of 2 tries; photo first read it
+  // right in 2 of 2 (2026-11-24). Accuracy matters more than the ~10 s the cache would save.
+  return requestOcr([imagePart(image, mimeType), { type: "text", text: OCR_PROMPT }], onProgress);
+}
+
+/** US-09: several pages of one document (a PDF without text), read together as one document. */
+export function readReceiptPages(
+  images: { bytes: Uint8Array; mimeType: string }[],
+  onProgress?: (partialText: string) => void,
+): Promise<OcrAnswer> {
+  const note =
+    images.length > 1
+      ? `Imaginile de mai sus sunt cele ${images.length} pagini ale ACELUIAȘI document, în ordine. Citește-le împreună: produsele pot continua pe pagina următoare, iar totalul de plată este de obicei pe ultima pagină.\n\n`
+      : "";
+  return requestOcr(
+    // Pictures first, then the instructions (see readReceipt).
+    [...images.map((image) => imagePart(image.bytes, image.mimeType)), { type: "text", text: note + OCR_PROMPT }],
+    onProgress,
+  );
+}
+
+/**
+ * US-09: the text of a PDF (all its pages), read exactly instead of recognized from a picture. Generated invoices
+ * (shops, marketplaces, e-Factura) have real text; it is faster than an image and has no misread digits.
+ */
+export function readReceiptText(pages: string[], onProgress?: (partialText: string) => void): Promise<OcrAnswer> {
+  const text = pages
+    .map((page, index) => `--- Pagina ${index + 1} din ${pages.length} ---\n${page}`)
+    .join("\n\n")
+    .slice(0, MAX_PDF_TEXT_CHARS);
+  const documentText =
+    "Documentul NU este o imagine: mai jos este textul extras din fișierul PDF al documentului, pagină cu pagină (coloanele tabelelor pot apărea pe rânduri separate). Aplică aceleași reguli ca pentru o imagine.\n\n" +
+    `<<<TEXTUL DOCUMENTULUI\n${text}\nSFÂRȘITUL TEXTULUI>>>\n\n`;
+  // Instructions first, so they are reused from the previous reading; the document's text comes after them.
+  return requestOcr([{ type: "text", text: `${OCR_PROMPT}\n\n${documentText}${OCR_ANSWER_NOW}` }], onProgress);
+}
+
+async function requestOcr(content: ContentPart[], onProgress?: (partialText: string) => void): Promise<OcrAnswer> {
   const started = Date.now();
-  const dataUrl = `data:${mimeType};base64,${Buffer.from(image).toString("base64")}`;
 
   let response: Response;
   try {
@@ -96,15 +143,18 @@ export async function readReceipt(
       signal: AbortSignal.timeout(ocrTimeoutMs()),
       body: JSON.stringify({
         temperature: 0,
-        max_tokens: 2000,
+        // Reuse the identical beginning (the instructions) from the previous reading instead of reading it again.
+        cache_prompt: true,
+        // Invoice lines carry unit price and VAT too: 2000 tokens could cut a long invoice short.
+        max_tokens: 4096,
+        // CA-10.1: ask llama.cpp to stream the answer so the stages can follow it. Without this it sends the whole
+        // answer at the end, and on a real phone the stage stayed "READING" for the full ~2 minutes (2026-11-21).
+        stream: Boolean(onProgress),
         response_format: { type: "json_object" },
         messages: [
           {
             role: "user",
-            content: [
-              { type: "image_url", image_url: { url: dataUrl } },
-              { type: "text", text: OCR_PROMPT },
-            ],
+            content,
           },
         ],
       }),

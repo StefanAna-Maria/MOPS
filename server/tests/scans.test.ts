@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import app from "../src/index.js";
 import { prisma } from "../src/lib/prisma.js";
-import { OcrError, readReceipt } from "../src/lib/ocr-client.js";
+import { OcrError, readReceipt, readReceiptPages, readReceiptText } from "../src/lib/ocr-client.js";
 import { stageFromPartialOutput, waitForScan } from "../src/lib/scan-processor.js";
 import { detectImageType } from "../src/lib/uploads.js";
 import { createSignedInUser, get, resetDatabase, send } from "./helpers.js";
@@ -9,7 +9,7 @@ import { makePdf, pngSize } from "./pdf-fixture.js";
 
 vi.mock("../src/lib/ocr-client.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../src/lib/ocr-client.js")>();
-  return { ...actual, readReceipt: vi.fn() };
+  return { ...actual, readReceipt: vi.fn(), readReceiptText: vi.fn(), readReceiptPages: vi.fn() };
 });
 
 const readReceiptMock = vi.mocked(readReceipt);
@@ -380,8 +380,8 @@ describe("GET /api/scans/:id", () => {
 
     first.release();
     await waitForScan(a.id);
-    await new Promise((resolve) => setTimeout(resolve, 200));
-    expect(readReceiptMock).toHaveBeenCalledTimes(2);
+    // The second reading starts only now; wait for it to reach the OCR service (database lookups take a moment).
+    await vi.waitFor(() => expect(readReceiptMock).toHaveBeenCalledTimes(2), { timeout: 15_000, interval: 50 });
 
     second.release();
     await waitForScan(b.id);
@@ -481,5 +481,53 @@ describe("CA-10.1 & CA-10.2: stages and POST /api/scans/:id/retry", () => {
 
     expect(missing.status).toBe(404);
     expect(foreign.status).toBe(404);
+  });
+});
+
+describe("US-09: PDFs are read with all their pages", () => {
+  const readTextMock = vi.mocked(readReceiptText);
+  const readPagesMock = vi.mocked(readReceiptPages);
+  const answer = { raw: CARREFOUR_ANSWER, model: "qwen3-vl-4b", durationMs: 20000 };
+
+  beforeEach(() => {
+    readTextMock.mockReset().mockResolvedValue(answer);
+    readPagesMock.mockReset().mockResolvedValue(answer);
+  });
+
+  it("reads a generated PDF (with text) from its text, every page, not from the picture", async () => {
+    const { cookie } = await createSignedInUser();
+    const pdf = makePdf([
+      { width: 595, height: 842, text: "Factura VAIE102059 VANESSE SARL" },
+      { width: 595, height: 842, text: "Incarcator 100W 166,00 TVA 33,20" },
+      { width: 595, height: 842, text: "Total de plata 184,20 RON card" },
+      { width: 595, height: 842, text: "Furnizor CIF RO12345678 Cluj" },
+    ]);
+
+    const { scan } = await uploadAndRead(cookie, { bytes: pdf, type: "application/pdf", name: "factura.pdf" });
+
+    expect(scan.status).toBe("DONE");
+    expect(readReceiptMock).not.toHaveBeenCalled();
+    expect(readTextMock).toHaveBeenCalledTimes(1);
+    const [pages] = readTextMock.mock.calls[0];
+    expect(pages).toHaveLength(4);
+    expect(pages[2]).toContain("184,20");
+    // The app still gets the picture of the first page to show.
+    const file = await prisma.file.findUniqueOrThrow({ where: { id: scan.id } });
+    expect(file.mimeType).toBe("image/png");
+  });
+
+  it("reads a scanned PDF (no text) with several pages as one picture per page", async () => {
+    const { cookie } = await createSignedInUser();
+    const pdf = makePdf([
+      { width: 595, height: 842, text: "A" },
+      { width: 595, height: 842, text: "B" },
+    ]);
+
+    const { scan } = await uploadAndRead(cookie, { bytes: pdf, type: "application/pdf", name: "scan.pdf" });
+
+    expect(scan.status).toBe("DONE");
+    expect(readTextMock).not.toHaveBeenCalled();
+    expect(readPagesMock).toHaveBeenCalledTimes(1);
+    expect(readPagesMock.mock.calls[0][0]).toHaveLength(2);
   });
 });

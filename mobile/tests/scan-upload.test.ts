@@ -46,7 +46,7 @@ describe("prepareScanImage", () => {
   it.each([
     [3024, 4032, { height: MAX_SCAN_SIDE }],
     [4032, 3024, { width: MAX_SCAN_SIDE }],
-  ])("shrinks a %ix%i photo to at most 2048 px on its long side", async (width, height, resize) => {
+  ])("shrinks a %ix%i photo to at most 1536 px on its long side", async (width, height, resize) => {
     photoOfSize(width, height);
 
     const uri = await prepareScanImage("file:///cache/photo.jpg");
@@ -57,7 +57,7 @@ describe("prepareScanImage", () => {
   });
 
   it("does not enlarge a photo that is already small enough", async () => {
-    photoOfSize(656, 2045);
+    photoOfSize(500, 1500);
 
     await prepareScanImage("file:///cache/photo.jpg");
 

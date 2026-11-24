@@ -5,8 +5,8 @@ import { Prisma } from "../generated/prisma/client.js";
 import { prisma } from "../lib/prisma.js";
 import { requireSession, type SessionVariables } from "../lib/session.js";
 import { resolveContext } from "../lib/context.js";
-import { detectImageType, readUpload, saveUpload, storageKeyFor } from "../lib/uploads.js";
-import { isPdf, renderFirstPageAsPng } from "../lib/pdf-render.js";
+import { detectImageType, readUpload, saveUpload, sourcePdfKeyFor, storageKeyFor } from "../lib/uploads.js";
+import { isPdf, renderPdfPicture } from "../lib/pdf-render.js";
 import { getScanStage, isScanPending, startScan } from "../lib/scan-processor.js";
 import { documentWithLines, requestTimeZone, serializeDocument, utcDate } from "./documents.js";
 import {
@@ -92,10 +92,14 @@ scans.post(
     // and browsers label uploads differently, and the label can be anything).
     let bytes: Uint8Array = new Uint8Array(await file.arrayBuffer());
     let mimeType = detectImageType(bytes);
+    // US-09: a PDF is also kept as it is, so it can be read with all its pages (and its real text, when it has one).
+    let sourcePdf: Uint8Array | null = null;
     // US-14 (CA-14.2): a PDF becomes a picture of its first page, so it is read exactly like a photo.
     if (!mimeType && isPdf(bytes)) {
       try {
-        bytes = renderFirstPageAsPng(bytes);
+        sourcePdf = bytes;
+        // US-09: the picture shows every page, one under another (only the first one was kept before).
+        bytes = renderPdfPicture(bytes);
         mimeType = "image/png";
       } catch (error) {
         console.warn("Could not read the uploaded PDF:", error instanceof Error ? error.message : error);
@@ -114,6 +118,9 @@ scans.post(
     const id = randomUUID().replace(/-/g, "");
     const storageKey = storageKeyFor(user.id, id, mimeType);
     await saveUpload(storageKey, bytes);
+    if (sourcePdf) {
+      await saveUpload(sourcePdfKeyFor(storageKey), sourcePdf);
+    }
 
     const created = await prisma.file.create({
       data: {
@@ -226,7 +233,8 @@ scans.post("/:id/document", async (c) => {
       data: {
         userId: user.id,
         companyId: file.companyId,
-        type: "SCANNED",
+        // US-09: a scanned invoice is shown as "Factură scanată", a receipt as "Bon scanat".
+        type: values.documentKind === "INVOICE" ? "SCANNED_INVOICE" : "SCANNED",
         merchant: values.merchant,
         date: utcDate(values.date),
         time: values.time,
@@ -242,6 +250,10 @@ scans.post("/:id/document", async (c) => {
             name: item.name,
             amount: item.amount,
             category: item.category,
+            // US-09, invoice lines: quantity, unit price WITHOUT VAT and VAT, as checked on the review screen.
+            quantity: item.quantity ?? null,
+            unitPrice: item.unitPrice ?? null,
+            vatAmount: item.vatAmount ?? null,
           })),
         },
       },

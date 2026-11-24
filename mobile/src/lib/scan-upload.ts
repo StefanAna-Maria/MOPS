@@ -4,10 +4,11 @@ import type { DocumentContext, Scan } from "@ocrinvoice/shared";
 import { apiFetch } from "./api";
 
 /**
- * Photos are shrunk to at most this many pixels on their long side before upload. A real receipt read perfectly at
- * 656x2045; a full-resolution camera photo is several MB, slower to upload and slower for the model to read.
+ * Photos are shrunk to at most this many pixels on their long side before upload: reading the picture takes the
+ * model time in proportion to its size. A real 11-line phone photo (Mega Image) was read with every amount right at
+ * 2048, 1536 and 1280 px, in ~66, 45 and 39 s (2026-11-24); 1536 keeps a margin for small print on long receipts.
  */
-export const MAX_SCAN_SIDE = 2048;
+export const MAX_SCAN_SIDE = 1536;
 
 const UPLOAD_TIMEOUT = 60_000;
 

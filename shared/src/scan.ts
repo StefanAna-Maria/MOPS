@@ -55,21 +55,41 @@ export type OcrField<T> = {
   confidence: number;
 };
 
+/** A fiscal receipt (bon fiscal) or an invoice (factură). */
+export const DOCUMENT_KINDS = ["RECEIPT", "INVOICE"] as const;
+
+export type DocumentKind = (typeof DOCUMENT_KINDS)[number];
+
+export const DOCUMENT_KIND_LABELS: Record<DocumentKind, string> = {
+  RECEIPT: "Bon fiscal",
+  INVOICE: "Factură",
+};
+
 export type OcrItem = {
   name: OcrField<string>;
   quantity: OcrField<number>;
-  /** The line's total, e.g. "12.38"; negative for a discount, e.g. "-3.20". */
+  /**
+   * The line's total WITH VAT, e.g. "12.38"; negative for a discount, e.g. "-3.20". On an invoice this is
+   * unitPrice × quantity + vatAmount.
+   */
   amount: OcrField<string>;
   category: OcrField<ExpenseCategory>;
+  /** Invoices only: the price of one unit WITHOUT VAT, e.g. "10.00". Absent on receipts. */
+  unitPrice?: OcrField<string>;
+  /** Invoices only: the VAT of the whole line, e.g. "6.30". Absent on receipts. */
+  vatAmount?: OcrField<string>;
 };
 
 export type OcrReading = {
+  /** Receipt or invoice. Readings made before invoices were supported have no value: treat them as RECEIPT. */
+  documentKind?: DocumentKind;
+  /** The seller: the store on a receipt, the supplier (furnizor) on an invoice — never the buyer. */
   merchant: OcrField<string>;
   /** "2026-11-12" */
   date: OcrField<string>;
   /** "17:58" */
   time: OcrField<string>;
-  /** "26.17" */
+  /** The amount to pay, WITH VAT, e.g. "26.17" (on an invoice: "Total de plată"; subtotal and VAT are not kept). */
   total: OcrField<string>;
   paymentMethod: OcrField<PaymentMethod>;
   items: OcrItem[];
