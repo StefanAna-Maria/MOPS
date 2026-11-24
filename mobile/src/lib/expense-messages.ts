@@ -39,6 +39,11 @@ export const SCAN_MESSAGES = {
 
 // US-11: checking the values read and saving the document.
 export const REVIEW_MESSAGES = {
+  /** US-09: "Factură" or "Bon fiscal", shown above what was read. */
+  documentKind: (label: string) => `Document citit: ${label}`,
+  /** US-09, invoices: "3 × 50,00 lei fără TVA + TVA 31,50 lei", under the line total with VAT. */
+  invoiceLine: (quantity: string, unitPrice: string, vatAmount: string) =>
+    `${quantity} × ${unitPrice} fără TVA + TVA ${vatAmount}`,
   verify: "Verifică",
   corrected: "Corectat",
   confirm: "E corect",
@@ -52,6 +57,9 @@ export const REVIEW_MESSAGES = {
   saveFailedTitle: "Nu am putut salva documentul",
   saveFailed: "Verifică datele și încearcă din nou.",
   photo: "Poza documentului",
+  photoOpen: "Atinge poza ca s-o vezi mare",
+  photoClose: "Închide",
+  photoUnavailable: "Poza nu a putut fi încărcată.",
   futureDate: "Data nu poate fi în viitor.",
   futureTime: "Ora nu poate fi în viitor.",
   invalidAmount: "Introdu o sumă cu cel mult două zecimale.",

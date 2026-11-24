@@ -114,6 +114,7 @@ describe("toDocumentBody", () => {
     const review = createReview(reading);
 
     expect(toDocumentBody({ ...review, total: confirmField(review.total) })).toEqual({
+      documentKind: "RECEIPT",
       merchant: "Carrefour express",
       date: "2026-11-12",
       time: "17:58",
@@ -131,5 +132,65 @@ describe("toDocumentBody", () => {
     const review = createReview({ ...reading, time: { value: null, confidence: 0 } });
 
     expect(toDocumentBody(review).time).toBeNull();
+  });
+});
+
+describe("createReview — invoices (US-09)", () => {
+  const field = <T,>(value: T, confidence = 0.95) => ({ value, confidence });
+  const invoiceReading: OcrReading = {
+    documentKind: "INVOICE",
+    merchant: field("Birotica Expert SRL"),
+    date: field("2026-11-10"),
+    time: { value: null, confidence: 0 },
+    total: field("424.18"),
+    paymentMethod: field("TRANSFER" as const),
+    items: [
+      {
+        name: field("Hârtie copiator A4"),
+        quantity: field(3),
+        unitPrice: field("50.00"),
+        vatAmount: field("31.50"),
+        amount: field("181.50"),
+        category: field("SHOPPING" as const),
+      },
+    ],
+    itemsTotal: "181.50",
+    totalMatches: false,
+  };
+
+  it("keeps the unit price without VAT, the VAT and the quantity of each invoice line, and the line total with VAT", () => {
+    const review = createReview(invoiceReading);
+
+    expect(review.documentKind).toBe("INVOICE");
+    expect(review.items[0].amount.value).toBe("181,50");
+    expect(review.items[0].invoice).toEqual({ quantity: 3, unitPrice: "50.00", vatAmount: "31.50", toCheck: false });
+  });
+
+  it("treats readings made before invoices were supported as receipts, without invoice details", () => {
+    const review = createReview(reading);
+
+    expect(review.documentKind).toBe("RECEIPT");
+    expect(review.items.every((item) => item.invoice === undefined)).toBe(true);
+  });
+
+  it("sends the invoice kind and each line's quantity, unit price without VAT and VAT when saving", () => {
+    const body = toDocumentBody(createReview(invoiceReading));
+
+    expect(body.documentKind).toBe("INVOICE");
+    expect(body.items[0]).toEqual({
+      name: "Hârtie copiator A4",
+      amount: "181.50",
+      category: "SHOPPING",
+      quantity: 3,
+      unitPrice: "50.00",
+      vatAmount: "31.50",
+    });
+  });
+
+  it("sends a receipt without invoice details", () => {
+    const body = toDocumentBody(createReview(reading));
+
+    expect(body.documentKind).toBe("RECEIPT");
+    expect(body.items[0]).not.toHaveProperty("unitPrice");
   });
 });

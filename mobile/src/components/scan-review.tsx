@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
 import {
+  DOCUMENT_KIND_LABELS,
   EXPENSE_CATEGORIES,
   EXPENSE_CATEGORY_LABELS,
   PAYMENT_METHODS,
@@ -176,8 +177,11 @@ export function ScanReview({ scanId, reading }: ScanReviewProps) {
 
   return (
     <>
+      <Text style={styles.documentKind} accessibilityRole="header">
+        {REVIEW_MESSAGES.documentKind(DOCUMENT_KIND_LABELS[review.documentKind])}
+      </Text>
       <Card>
-        {textField("merchant", "Magazin")}
+        {textField("merchant", review.documentKind === "INVOICE" ? "Furnizor" : "Magazin")}
         <View style={styles.field}>
           <DateTimeField
             label="Data"
@@ -190,6 +194,7 @@ export function ScanReview({ scanId, reading }: ScanReviewProps) {
           />
           <FieldStatusBadge label="Data" field={review.date} onConfirm={confirm("date")} />
         </View>
+        {review.documentKind === "INVOICE" ? null : (
         <View style={styles.field}>
           <DateTimeField
             label="Ora"
@@ -202,6 +207,7 @@ export function ScanReview({ scanId, reading }: ScanReviewProps) {
           />
           <FieldStatusBadge label="Ora" field={review.time} onConfirm={confirm("time")} />
         </View>
+        )}
         {textField("total", "Total", {
           placeholder: "0,00",
           keyboardType: "decimal-pad",
@@ -222,13 +228,6 @@ export function ScanReview({ scanId, reading }: ScanReviewProps) {
           />
           <FieldStatusBadge label="Plată" field={review.paymentMethod} onConfirm={confirm("paymentMethod")} />
         </View>
-        <SelectField
-          label="Categorie"
-          value={review.category}
-          options={EXPENSE_CATEGORIES}
-          labels={EXPENSE_CATEGORY_LABELS}
-          onChange={(category) => setReview((previous) => ({ ...previous, category }))}
-        />
       </Card>
 
       <Text style={styles.sectionTitle}>{REVIEW_MESSAGES.products}</Text>
@@ -290,6 +289,17 @@ export function ScanReview({ scanId, reading }: ScanReviewProps) {
                   }))
                 }
               />
+              {item.invoice ? (
+                // Unit price / VAT read under the agreed threshold (0.8) are flagged like the other values.
+                <Text style={[styles.invoiceLine, item.invoice.toCheck && styles.invoiceLineCheck]}>
+                  {REVIEW_MESSAGES.invoiceLine(
+                    String(item.invoice.quantity).replace(".", ","),
+                    formatLei(amountToCents(item.invoice.unitPrice)),
+                    formatLei(amountToCents(item.invoice.vatAmount)),
+                  )}
+                  {item.invoice.toCheck ? ` · ${REVIEW_MESSAGES.verify}` : ""}
+                </Text>
+              ) : null}
             </View>
             <View style={styles.field}>
               <SelectField
@@ -401,6 +411,19 @@ const styles = StyleSheet.create({
     ...typography.bodyLg,
     paddingRight: spacing.lg,
     color: colors.textSecondary,
+  },
+  documentKind: {
+    ...typography.label,
+    fontSize: 12,
+    letterSpacing: 0.6,
+    color: colors.textSecondary,
+  },
+  invoiceLine: {
+    ...typography.bodySm,
+    color: colors.textSecondary,
+  },
+  invoiceLineCheck: {
+    color: "#92400E",
   },
   sectionTitle: {
     ...typography.label,

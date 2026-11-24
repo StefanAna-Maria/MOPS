@@ -7,6 +7,7 @@ import {
   parseLineAmount,
   suggestCategory,
   validateScannedDocument,
+  type DocumentKind,
   type ExpenseCategory,
   type OcrField,
   type OcrReading,
@@ -21,14 +22,29 @@ export type ReviewField<T = string> = {
   status: FieldStatus;
 };
 
+/** Invoice lines only: what the invoice says, shown under the line total (with VAT). Read-only. */
+export type InvoiceLineDetail = {
+  quantity: number;
+  /** Price of one unit WITHOUT VAT, e.g. "50.00". */
+  unitPrice: string;
+  /** VAT of the whole line, e.g. "31.50". */
+  vatAmount: string;
+  /** The unit price or the VAT was read with a confidence under LOW_CONFIDENCE (0.8): shown with "Verifică". */
+  toCheck: boolean;
+};
+
 export type ReviewItem = {
   key: string;
   name: ReviewField;
+  /** The line total WITH VAT. */
   amount: ReviewField;
   category: ReviewField<ExpenseCategory>;
+  invoice?: InvoiceLineDetail;
 };
 
 export type Review = {
+  /** Receipt or invoice, as read (US-09). */
+  documentKind: DocumentKind;
   merchant: ReviewField;
   date: ReviewField;
   time: ReviewField;
@@ -57,16 +73,29 @@ const withComma = (amount: string) => amount.replace(".", ",");
 const asIs = <T>(value: T) => value;
 
 export function createReview(reading: OcrReading): Review {
+  const documentKind: DocumentKind = reading.documentKind ?? "RECEIPT";
   const items: ReviewItem[] = reading.items.map((item) => ({
     key: itemKey(),
     name: readField(item.name, asIs, ""),
     amount: readField(item.amount, withComma, ""),
     category: readField(item.category, asIs, "OTHER"),
+    ...(documentKind === "INVOICE" && item.unitPrice?.value && item.vatAmount?.value
+      ? {
+          invoice: {
+            quantity: item.quantity.value ?? 1,
+            unitPrice: item.unitPrice.value,
+            vatAmount: item.vatAmount.value,
+            toCheck: item.unitPrice.confidence < LOW_CONFIDENCE || item.vatAmount.confidence < LOW_CONFIDENCE,
+          },
+        }
+      : {}),
   }));
   return {
+    documentKind,
     merchant: readField(reading.merchant, asIs, ""),
     date: readField(reading.date, formatDisplayDate, ""),
-    time: readField(reading.time, asIs, ""),
+    // An invoice has no time: nothing to read, so nothing to check (it was flagged, and picking one filled in "now").
+    time: documentKind === "INVOICE" ? { value: "", status: "ok" } : readField(reading.time, asIs, ""),
     total: readField(reading.total, withComma, ""),
     paymentMethod: readField<PaymentMethod, PaymentMethod | null>(reading.paymentMethod, asIs, null),
     category: suggestCategory(
@@ -114,16 +143,24 @@ export function reviewTotal(review: Review): TotalCheck {
 
 export function toDocumentBody(review: Review) {
   return {
+    documentKind: review.documentKind,
     merchant: review.merchant.value.trim(),
     date: parseDisplayDate(review.date.value) ?? review.date.value,
-    time: review.time.value.trim() || null,
+    time: review.documentKind === "INVOICE" ? null : review.time.value.trim() || null,
     total: parseAmount(review.total.value) ?? review.total.value,
     paymentMethod: review.paymentMethod.value,
-    category: review.category,
+    // The document's category follows its products (the picker was removed from the review screen, 2026-11-24).
+    category: suggestCategory(
+      review.items.map((item) => ({ amount: parseLineAmount(item.amount.value), category: item.category.value })),
+    ),
     items: review.items.map((item) => ({
       name: item.name.value.trim(),
       amount: parseLineAmount(item.amount.value) ?? item.amount.value,
       category: item.category.value,
+      // US-09: invoice lines keep what the invoice says (quantity, unit price WITHOUT VAT, VAT).
+      ...(item.invoice
+        ? { quantity: item.invoice.quantity, unitPrice: item.invoice.unitPrice, vatAmount: item.invoice.vatAmount }
+        : {}),
     })),
   };
 }

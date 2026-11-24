@@ -45,7 +45,7 @@ describe("Detaliul unui document", () => {
     expect(apiFetchMock).toHaveBeenCalledWith("/api/documents/doc-1");
   });
 
-  it("CA-06.1: shows the merchant, date, total, products, payment and note", async () => {
+  it("CA-06.1: shows a manual expense's merchant, date, total, payment and note, without a PRODUSE list", async () => {
     respond(200, { document });
 
     await render(<DocumentScreen />);
@@ -53,9 +53,10 @@ describe("Detaliul unui document", () => {
     expect(await screen.findByRole("header", { name: "Farmacia Tei" })).toBeOnTheScreen();
     expect(screen.getByText("Sănătate · Cheltuială manuală")).toBeOnTheScreen();
     expect(screen.getByText("05.11.2026")).toBeOnTheScreen();
-    expect(screen.getAllByText("1.234,50 lei")).toHaveLength(2);
-    expect(screen.getByText("PRODUSE")).toBeOnTheScreen();
-    expect(screen.getAllByText("Farmacia Tei")).toHaveLength(2);
+    expect(screen.getByText("1.234,50 lei")).toBeOnTheScreen();
+    // Its only line repeats the expense itself, so there is no PRODUSE list (2026-11-24).
+    expect(screen.queryByText("PRODUSE")).toBeNull();
+    expect(screen.getAllByText("Farmacia Tei")).toHaveLength(1);
     expect(screen.getByText("Transfer")).toBeOnTheScreen();
     expect(screen.getByText("rețetă compensată")).toBeOnTheScreen();
   });
@@ -96,5 +97,131 @@ describe("Detaliul unui document", () => {
     await fireEvent.press(screen.getByRole("button", { name: "Înapoi" }));
 
     expect(router.back).toHaveBeenCalled();
+  });
+});
+
+describe("US-09: a saved invoice", () => {
+  it("shows Factură scanată and, under each invoice line, quantity × unit price without VAT + VAT", async () => {
+    respond(200, {
+      document: {
+        ...document,
+        type: "SCANNED_INVOICE",
+        merchant: "VANESSE SARL",
+        total: "184.20",
+        category: "SHOPPING",
+        lines: [
+          { id: "l1", position: 1, name: "Incarcator 100W", amount: "199.20", category: "SHOPPING", quantity: "1", unitPrice: "166.00", vatAmount: "33.20" },
+          { id: "l2", position: 2, name: "Reducere voucher", amount: "-15.00", category: "SHOPPING", quantity: "1", unitPrice: null, vatAmount: "0.00" },
+        ],
+      },
+    });
+
+    await render(<DocumentScreen />);
+
+    expect(await screen.findByText("Cumpărături · Factură scanată")).toBeOnTheScreen();
+    expect(screen.getByText("1 × 166,00 lei fără TVA + TVA 33,20 lei")).toBeOnTheScreen();
+    expect(screen.getByText("199,20 lei")).toBeOnTheScreen();
+    // A discount line without a unit price gets no detail line.
+    expect(screen.getAllByText(/fără TVA/)).toHaveLength(1);
+  });
+
+  it("shows no invoice details for a manual expense", async () => {
+    respond(200, { document });
+
+    await render(<DocumentScreen />);
+
+    await screen.findByRole("header", { name: "Farmacia Tei" });
+    expect(screen.queryByText(/fără TVA/)).toBeNull();
+  });
+});
+
+describe("US-06: scanned documents", () => {
+  const scannedReceipt = {
+    ...document,
+    type: "SCANNED",
+    merchant: "Mega Image",
+    time: "13:31",
+    total: "18.28",
+    category: "GROCERIES",
+    fileId: "file-1",
+    lines: [
+      { id: "l1", position: 1, name: "LAPTE 1L", amount: "8.29", category: "GROCERIES", quantity: null, unitPrice: null, vatAmount: null },
+      { id: "l2", position: 2, name: "BR CHEDDAR 150G", amount: "9.99", category: "GROCERIES", quantity: null, unitPrice: null, vatAmount: null },
+    ],
+  };
+
+  function respondWithPhoto(doc: unknown) {
+    apiFetchMock.mockImplementation(async (path: string) =>
+      path.endsWith("/image")
+        ? { ok: true, status: 200, headers: { get: () => "image/jpeg" }, arrayBuffer: async () => new Uint8Array([0xff, 0xd8, 0xff]).buffer }
+        : { ok: true, status: 200, json: async () => ({ document: doc }) },
+    );
+  }
+
+  it("shows a scanned receipt's products, with its time, and its photo at the end", async () => {
+    respondWithPhoto(scannedReceipt);
+
+    await render(<DocumentScreen />);
+
+    expect(await screen.findByText("PRODUSE")).toBeOnTheScreen();
+    expect(screen.getByText("LAPTE 1L")).toBeOnTheScreen();
+    expect(screen.getByText("05.11.2026, 13:31")).toBeOnTheScreen();
+    expect(screen.getByText("POZA")).toBeOnTheScreen();
+    const photo = await screen.findByTestId("document-photo");
+    expect(photo.props.source.uri).toMatch(/^data:image\/jpeg;base64,/);
+    // The photo comes after the products.
+    const texts = screen.getAllByText(/^(PRODUSE|POZA)$/).map((node) => node.props.children);
+    expect(texts).toEqual(["PRODUSE", "POZA"]);
+  });
+
+  it("opens the photo full screen when tapped", async () => {
+    respondWithPhoto(scannedReceipt);
+    await render(<DocumentScreen />);
+
+    await fireEvent.press(await screen.findByLabelText("Poza documentului"));
+
+    expect(screen.getByRole("button", { name: "Închide" })).toBeOnTheScreen();
+  });
+
+  it("shows a scanned invoice as Factură scanată, with its date only (an invoice has no time)", async () => {
+    respondWithPhoto({ ...scannedReceipt, type: "SCANNED_INVOICE", merchant: "VANESSE SARL", time: "13:43" });
+
+    await render(<DocumentScreen />);
+
+    expect(await screen.findByText("Alimente · Factură scanată")).toBeOnTheScreen();
+    expect(screen.getByText("05.11.2026")).toBeOnTheScreen();
+    expect(screen.queryByText(/13:43/)).toBeNull();
+  });
+
+  it("says so when the photo cannot be loaded, instead of showing a white box", async () => {
+    apiFetchMock.mockImplementation(async (path: string) =>
+      path.endsWith("/image")
+        ? { ok: false, status: 401, headers: { get: () => null }, arrayBuffer: async () => new ArrayBuffer(0) }
+        : { ok: true, status: 200, json: async () => ({ document: scannedReceipt }) },
+    );
+
+    await render(<DocumentScreen />);
+
+    expect(await screen.findByText("Poza nu a putut fi încărcată.")).toBeOnTheScreen();
+  });
+});
+
+describe("US-06: Notă", () => {
+  it("shows Notă for a manual expense", async () => {
+    respond(200, { document });
+
+    await render(<DocumentScreen />);
+
+    expect(await screen.findByText("Notă")).toBeOnTheScreen();
+    expect(screen.getByText("rețetă compensată")).toBeOnTheScreen();
+  });
+
+  it.each(["SCANNED", "SCANNED_INVOICE"])("does not show Notă for a %s document", async (type) => {
+    respond(200, { document: { ...document, type, note: null, lines: [] } });
+
+    await render(<DocumentScreen />);
+
+    await screen.findByRole("header", { name: "Farmacia Tei" });
+    expect(screen.queryByText("Notă")).toBeNull();
   });
 });

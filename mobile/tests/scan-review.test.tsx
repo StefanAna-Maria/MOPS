@@ -5,7 +5,6 @@ import type { ExpenseDocument, OcrReading, Scan } from "@ocrinvoice/shared";
 import ScanResultScreen from "@/app/(app)/scan-result/[id]";
 import DocumentScreen from "@/app/(app)/document/[id]";
 import { apiFetch } from "@/lib/api";
-import { API_URL } from "@/lib/config";
 import { fetchScan } from "@/lib/scan-upload";
 
 jest.mock("@/lib/scan-upload", () => ({ POLL_INTERVAL_MS: 2000, fetchScan: jest.fn() }));
@@ -166,6 +165,7 @@ describe("Verificarea datelor citite", () => {
     expect(path).toBe("/api/scans/scan-1/document");
     expect(init.method).toBe("POST");
     expect(JSON.parse(init.body)).toEqual({
+      documentKind: "RECEIPT",
       merchant: "Carrefour express",
       date: "2026-11-12",
       time: "17:58",
@@ -335,13 +335,144 @@ describe("Documentul salvat, cu poza atașată", () => {
 
   it("CA-11.4: the detail of a scanned document shows it as Bon scanat, with its photo", async () => {
     paramsMock.mockReturnValue({ id: "doc-1" });
-    apiFetchMock.mockResolvedValue({ ok: true, status: 200, json: async () => ({ document: scanned }) });
+    apiFetchMock.mockImplementation(async (path: string) =>
+      path.endsWith("/image")
+        ? { ok: true, status: 200, headers: { get: () => "image/jpeg" }, arrayBuffer: async () => new Uint8Array([0xff, 0xd8, 0xff]).buffer }
+        : { ok: true, status: 200, json: async () => ({ document: scanned }) },
+    );
 
     await render(<DocumentScreen />);
 
     expect(await screen.findByText("Alimente · Bon scanat")).toBeOnTheScreen();
-    expect((await screen.findByLabelText("Poza documentului")).props.source).toMatchObject({
-      uri: `${API_URL}/api/scans/scan-1/image`,
-    });
+    // The photo is downloaded with the session (apiFetch), not by the image loader, which got 401 on Android.
+    expect(apiFetchMock).toHaveBeenCalledWith("/api/scans/scan-1/image");
+    const photo = await screen.findByTestId("document-photo");
+    expect(photo.props.source).toEqual({ uri: "data:image/jpeg;base64,/9j/" });
+  });
+});
+
+describe("US-09: invoices on the review screen", () => {
+  const field = <T,>(value: T, confidence = 0.95) => ({ value, confidence });
+  const invoiceReading: OcrReading = {
+    documentKind: "INVOICE",
+    merchant: field("Birotica Expert SRL"),
+    date: field("2026-11-10"),
+    time: { value: null, confidence: 0 },
+    total: field("424.18"),
+    paymentMethod: field("TRANSFER" as const),
+    items: [
+      {
+        name: field("Hârtie copiator A4"),
+        quantity: field(3),
+        unitPrice: field("50.00"),
+        vatAmount: field("31.50"),
+        amount: field("181.50"),
+        category: field("SHOPPING" as const),
+      },
+      {
+        name: field("Toner imprimantă"),
+        quantity: field(2),
+        unitPrice: field("89.90"),
+        vatAmount: field("37.76"),
+        amount: field("217.56"),
+        category: field("SHOPPING" as const),
+      },
+      {
+        name: field("Carte contabilitate"),
+        quantity: field(1),
+        unitPrice: field("22.63"),
+        vatAmount: field("2.49"),
+        amount: field("25.12"),
+        category: field("EDUCATION" as const),
+      },
+    ],
+    itemsTotal: "424.18",
+    totalMatches: true,
+  };
+
+  it("says it read an invoice, names the supplier, and shows unit price without VAT + VAT under each line total", async () => {
+    fetchScanMock.mockResolvedValue(doneScan(invoiceReading));
+    await render(<ScanResultScreen />);
+
+    expect(await screen.findByText("Document citit: Factură")).toBeOnTheScreen();
+    expect(screen.getByLabelText("Furnizor")).toHaveDisplayValue("Birotica Expert SRL");
+    expect(screen.getByDisplayValue("181,50")).toBeOnTheScreen();
+    expect(screen.getByText("3 × 50,00 lei fără TVA + TVA 31,50 lei")).toBeOnTheScreen();
+    expect(screen.getByText("2 × 89,90 lei fără TVA + TVA 37,76 lei")).toBeOnTheScreen();
+    expect(screen.getByDisplayValue("424,18")).toBeOnTheScreen();
+  });
+
+  it("shows a receipt as Bon fiscal, with Magazin and no invoice details", async () => {
+    await showReview();
+
+    expect(screen.getByText("Document citit: Bon fiscal")).toBeOnTheScreen();
+    expect(screen.queryByText(/fără TVA/)).toBeNull();
+  });
+});
+
+describe("US-06 / US-09: review screen changes (2026-11-24)", () => {
+  const field = <T,>(value: T, confidence = 0.95) => ({ value, confidence });
+  const invoice = (unitConfidence = 0.9): OcrReading => ({
+    documentKind: "INVOICE",
+    merchant: field("VANESSE SARL"),
+    date: field("2026-11-17"),
+    time: { value: null, confidence: 0 },
+    total: field("184.20"),
+    paymentMethod: field("CARD" as const),
+    items: [
+      {
+        name: field("Incarcator 100W"),
+        quantity: field(1),
+        unitPrice: field("166.00", unitConfidence),
+        vatAmount: field("33.20", unitConfidence),
+        amount: field("199.20"),
+        category: field("SHOPPING" as const),
+      },
+      {
+        name: field("Reducere voucher"),
+        quantity: field(1),
+        amount: field("-15.00"),
+        category: field("SHOPPING" as const),
+      },
+    ],
+    itemsTotal: "184.20",
+    totalMatches: true,
+  });
+
+  it("has no document-level Categorie in the first card (each product keeps its own category)", async () => {
+    await showReview();
+
+    expect(screen.queryByText("Categorie")).toBeNull();
+    expect(screen.getByLabelText(/^Categoria produsului 1/)).toBeOnTheScreen();
+  });
+
+  it("shows no Ora for an invoice, flags nothing about it, and saves the invoice without a time", async () => {
+    fetchScanMock.mockResolvedValue(doneScan(invoice()));
+    apiFetchMock.mockResolvedValue({ ok: true, status: 201, json: async () => ({ document: {} }) });
+    await render(<ScanResultScreen />);
+    await screen.findByText("Document citit: Factură");
+
+    expect(screen.queryByText("Ora")).toBeNull();
+    expect(screen.queryByLabelText("Ora: Verifică")).toBeNull();
+
+    await fireEvent.press(saveButton());
+
+    const body = JSON.parse(apiFetchMock.mock.calls[0][1].body);
+    expect(body.time).toBeNull();
+    expect(body.documentKind).toBe("INVOICE");
+  });
+
+  it("flags an invoice line's unit price and VAT read under 0.8 with Verifică", async () => {
+    fetchScanMock.mockResolvedValue(doneScan(invoice(0.4)));
+    await render(<ScanResultScreen />);
+
+    expect(await screen.findByText("1 × 166,00 lei fără TVA + TVA 33,20 lei · Verifică")).toBeOnTheScreen();
+  });
+
+  it("does not flag them when they were read with enough confidence", async () => {
+    fetchScanMock.mockResolvedValue(doneScan(invoice(0.9)));
+    await render(<ScanResultScreen />);
+
+    expect(await screen.findByText("1 × 166,00 lei fără TVA + TVA 33,20 lei")).toBeOnTheScreen();
   });
 });
