@@ -52,3 +52,20 @@ export function detectImageType(bytes: Uint8Array): "image/jpeg" | "image/png" |
   }
   return null;
 }
+
+/**
+ * US-09: where the original PDF of an upload is kept, next to the picture of its first page ("<id>.png" →
+ * "<id>.source.pdf"). The picture is what the app shows; the PDF is what gets read, with all its pages.
+ */
+export function sourcePdfKeyFor(storageKey: string) {
+  return storageKey.replace(/\.[a-z]+$/i, ".source.pdf");
+}
+
+/** The original PDF of an upload, or null when the upload was a photo. */
+export async function readSourcePdf(storageKey: string): Promise<Uint8Array | null> {
+  try {
+    return new Uint8Array(await readUpload(sourcePdfKeyFor(storageKey)));
+  } catch {
+    return null;
+  }
+}

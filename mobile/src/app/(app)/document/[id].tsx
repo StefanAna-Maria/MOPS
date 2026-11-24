@@ -14,7 +14,7 @@ import { PrimaryButton } from "@/components/primary-button";
 import { apiFetch } from "@/lib/api";
 import { showServerUnavailable } from "@/lib/alerts";
 import { amountToCents, documentSubtitle, formatLei } from "@/lib/expense-list";
-import { DOCUMENT_MESSAGES, HOME_MESSAGES } from "@/lib/expense-messages";
+import { DOCUMENT_MESSAGES, HOME_MESSAGES, REVIEW_MESSAGES } from "@/lib/expense-messages";
 import { colors, elevation, radius, spacing, typography } from "@/constants/theme";
 
 type DocumentState =
@@ -49,7 +49,11 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 }
 
 function DocumentDetail({ document }: { document: ExpenseDocument }) {
-  const date = formatDisplayDate(document.date) + (document.time ? `, ${document.time}` : "");
+  // An invoice has a date but no time (a time saved with one would only be when it was checked, not the invoice's).
+  const isInvoice = document.type === "SCANNED_INVOICE";
+  const date = formatDisplayDate(document.date) + (document.time && !isInvoice ? `, ${document.time}` : "");
+  // A manual expense has exactly one line, named like the expense: listing it again under PRODUSE adds nothing.
+  const showProducts = document.type !== "MANUAL";
   const payment = isPaymentMethod(document.paymentMethod)
     ? PAYMENT_METHOD_LABELS[document.paymentMethod]
     : document.paymentMethod;
@@ -64,23 +68,45 @@ function DocumentDetail({ document }: { document: ExpenseDocument }) {
         <Text style={styles.total}>{formatLei(amountToCents(document.total))}</Text>
       </View>
 
-      {document.fileId ? <DocumentPhoto fileId={document.fileId} /> : null}
-
       <View style={styles.card}>
         <DetailRow label="Data" value={date} />
         <DetailRow label="Plată" value={payment} />
-        <DetailRow label="Notă" value={document.note ?? "—"} />
+        {/* Only a manual expense has a note (typed by the user); a scanned receipt or invoice has none. */}
+        {document.type === "MANUAL" ? <DetailRow label="Notă" value={document.note ?? "—"} /> : null}
       </View>
 
+      {showProducts ? (
+        <>
       <Text style={styles.sectionTitle}>PRODUSE</Text>
       <View style={styles.card}>
         {document.lines.map((line, index) => (
           <View key={line.id} style={[styles.lineRow, index > 0 && styles.lineDivider]}>
-            <Text style={styles.lineName}>{line.name}</Text>
+            <View style={styles.lineTexts}>
+              <Text style={styles.lineName}>{line.name}</Text>
+              {line.unitPrice && line.vatAmount ? (
+                // US-09, invoice lines: quantity × unit price WITHOUT VAT + the line VAT (the amount on the right includes it).
+                <Text style={styles.lineInvoice}>
+                  {REVIEW_MESSAGES.invoiceLine(
+                    (line.quantity ?? "1").replace(".", ","),
+                    formatLei(amountToCents(line.unitPrice)),
+                    formatLei(amountToCents(line.vatAmount)),
+                  )}
+                </Text>
+              ) : null}
+            </View>
             <Text style={styles.lineAmount}>{formatLei(amountToCents(line.amount))}</Text>
           </View>
         ))}
       </View>
+        </>
+      ) : null}
+
+      {document.fileId ? (
+        <>
+          <Text style={styles.sectionTitle}>POZA</Text>
+          <DocumentPhoto fileId={document.fileId} />
+        </>
+      ) : null}
     </>
   );
 }
@@ -279,10 +305,17 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: colors.border,
   },
+  lineTexts: {
+    flex: 1,
+    gap: 2,
+  },
   lineName: {
     ...typography.bodyMd,
-    flex: 1,
     color: colors.textPrimary,
+  },
+  lineInvoice: {
+    ...typography.bodySm,
+    color: colors.textSecondary,
   },
   lineAmount: {
     ...typography.label,

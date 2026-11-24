@@ -1,22 +1,22 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
 import {
-  EXPENSE_CATEGORIES,
-  EXPENSE_CATEGORY_LABELS,
+  DOCUMENT_KIND_LABELS,
   PAYMENT_METHODS,
   PAYMENT_METHOD_LABELS,
   parseLineAmount,
-  type ExpenseCategory,
+  type CategoryOption,
   type OcrReading,
 } from "@ocrinvoice/shared";
 import { Card } from "@/components/card";
+import { CategoryField } from "@/components/category-field";
 import { DateTimeField, formatPickedDate } from "@/components/date-time-field";
 import { PrimaryButton } from "@/components/primary-button";
 import { SegmentedField } from "@/components/segmented-field";
-import { SelectField } from "@/components/select-field";
 import { TextField } from "@/components/text-field";
 import { apiFetch } from "@/lib/api";
+import { BUILT_IN_CATEGORIES, fetchCategories } from "@/lib/categories";
 import { showServerUnavailable } from "@/lib/alerts";
 import { localTimeNow, localTodayIso } from "@/lib/dates";
 import { amountToCents, formatLei } from "@/lib/expense-list";
@@ -114,6 +114,31 @@ export function ScanReview({ scanId, reading }: ScanReviewProps) {
   const [review, setReview] = useState<Review>(() => createReview(reading));
   const [loading, setLoading] = useState(false);
   const saving = useRef(false);
+  // US-03: the user's categories (their own included), as for a manual expense; built-in ones until they load.
+  const [categories, setCategories] = useState<CategoryOption[]>(BUILT_IN_CATEGORIES);
+
+  useEffect(() => {
+    let ignore = false;
+    fetchCategories()
+      .then((list) => {
+        if (ignore) {
+          return;
+        }
+        setCategories(list);
+        // A category removed since the reading (deleted or hidden) becomes "Altele", to be checked.
+        const known = new Set(list.map((category) => category.id));
+        setReview((previous) => ({
+          ...previous,
+          items: previous.items.map((item) =>
+            known.has(item.category.value) ? item : { ...item, category: { value: "OTHER", status: "verify" } },
+          ),
+        }));
+      })
+      .catch(() => {});
+    return () => {
+      ignore = true;
+    };
+  }, []);
 
   const today = localTodayIso();
   const now = localTimeNow();
@@ -176,8 +201,11 @@ export function ScanReview({ scanId, reading }: ScanReviewProps) {
 
   return (
     <>
+      <Text style={styles.documentKind} accessibilityRole="header">
+        {REVIEW_MESSAGES.documentKind(DOCUMENT_KIND_LABELS[review.documentKind])}
+      </Text>
       <Card>
-        {textField("merchant", "Magazin")}
+        {textField("merchant", review.documentKind === "INVOICE" ? "Furnizor" : "Magazin")}
         <View style={styles.field}>
           <DateTimeField
             label="Data"
@@ -190,6 +218,7 @@ export function ScanReview({ scanId, reading }: ScanReviewProps) {
           />
           <FieldStatusBadge label="Data" field={review.date} onConfirm={confirm("date")} />
         </View>
+        {review.documentKind === "INVOICE" ? null : (
         <View style={styles.field}>
           <DateTimeField
             label="Ora"
@@ -202,6 +231,7 @@ export function ScanReview({ scanId, reading }: ScanReviewProps) {
           />
           <FieldStatusBadge label="Ora" field={review.time} onConfirm={confirm("time")} />
         </View>
+        )}
         {textField("total", "Total", {
           placeholder: "0,00",
           keyboardType: "decimal-pad",
@@ -222,13 +252,6 @@ export function ScanReview({ scanId, reading }: ScanReviewProps) {
           />
           <FieldStatusBadge label="Plată" field={review.paymentMethod} onConfirm={confirm("paymentMethod")} />
         </View>
-        <SelectField
-          label="Categorie"
-          value={review.category}
-          options={EXPENSE_CATEGORIES}
-          labels={EXPENSE_CATEGORY_LABELS}
-          onChange={(category) => setReview((previous) => ({ ...previous, category }))}
-        />
       </Card>
 
       <Text style={styles.sectionTitle}>{REVIEW_MESSAGES.products}</Text>
@@ -290,14 +313,25 @@ export function ScanReview({ scanId, reading }: ScanReviewProps) {
                   }))
                 }
               />
+              {item.invoice ? (
+                // Unit price / VAT read under the agreed threshold (0.8) are flagged like the other values.
+                <Text style={[styles.invoiceLine, item.invoice.toCheck && styles.invoiceLineCheck]}>
+                  {REVIEW_MESSAGES.invoiceLine(
+                    String(item.invoice.quantity).replace(".", ","),
+                    formatLei(amountToCents(item.invoice.unitPrice)),
+                    formatLei(amountToCents(item.invoice.vatAmount)),
+                  )}
+                  {item.invoice.toCheck ? ` · ${REVIEW_MESSAGES.verify}` : ""}
+                </Text>
+              ) : null}
             </View>
             <View style={styles.field}>
-              <SelectField
+              <CategoryField
                 label={categoryLabel}
                 value={item.category.value}
-                options={EXPENSE_CATEGORIES}
-                labels={EXPENSE_CATEGORY_LABELS}
-                onChange={(value: ExpenseCategory) =>
+                categories={categories}
+                onCategoriesChange={setCategories}
+                onChange={(value) =>
                   updateItem(item.key, (it) => ({
                     ...it,
                     category: editField(it.category, value),
@@ -401,6 +435,19 @@ const styles = StyleSheet.create({
     ...typography.bodyLg,
     paddingRight: spacing.lg,
     color: colors.textSecondary,
+  },
+  documentKind: {
+    ...typography.label,
+    fontSize: 12,
+    letterSpacing: 0.6,
+    color: colors.textSecondary,
+  },
+  invoiceLine: {
+    ...typography.bodySm,
+    color: colors.textSecondary,
+  },
+  invoiceLineCheck: {
+    color: "#92400E",
   },
   sectionTitle: {
     ...typography.label,

@@ -15,21 +15,26 @@ export function BottomSheet({ visible, title, onClose, children }: BottomSheetPr
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="Închide">
-        <Pressable style={[styles.sheet, { paddingBottom: insets.bottom + spacing.lg }]} onPress={() => {}}>
+      <View style={styles.container}>
+        {/* The backdrop is a layer behind the sheet, not around it: a touchable wrapped around the sheet took the
+            touches that start on plain text inside it, so its lists could not scroll (e.g. "Schimbă ordinea"). */}
+        <Pressable style={[StyleSheet.absoluteFill, styles.backdrop]} onPress={onClose} accessibilityLabel="Închide" />
+        <View style={[styles.sheet, { paddingBottom: insets.bottom + spacing.lg }]}>
           <View style={styles.handle} />
           <Text style={styles.title}>{title}</Text>
           {children}
-        </Pressable>
-      </Pressable>
+        </View>
+      </View>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  backdrop: {
+  container: {
     flex: 1,
     justifyContent: "flex-end",
+  },
+  backdrop: {
     backgroundColor: "rgba(15, 23, 42, 0.4)",
   },
   sheet: {

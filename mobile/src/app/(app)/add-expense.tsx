@@ -1,12 +1,10 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Alert, StyleSheet, Text } from "react-native";
 import { router } from "expo-router";
 import {
   DEFAULT_EXPENSE_CATEGORY,
   DEFAULT_PAYMENT_METHOD,
   DESCRIPTION_MAX_LENGTH,
-  EXPENSE_CATEGORIES,
-  EXPENSE_CATEGORY_LABELS,
   NOTE_MAX_LENGTH,
   PAYMENT_METHODS,
   PAYMENT_METHOD_LABELS,
@@ -15,19 +13,21 @@ import {
   isPaymentDateValid,
   parseAmount,
   parseDisplayDate,
-  type ExpenseCategory,
+  type CategoryOption,
   type PaymentMethod,
 } from "@ocrinvoice/shared";
 import { Screen } from "@/components/screen";
 import { Card } from "@/components/card";
 import { TextField } from "@/components/text-field";
-import { SelectField } from "@/components/select-field";
+import { CategoryField } from "@/components/category-field";
+import { DateTimeField } from "@/components/date-time-field";
 import { SegmentedField } from "@/components/segmented-field";
 import { PrimaryButton } from "@/components/primary-button";
 import { TextLink } from "@/components/text-link";
 import { apiFetch } from "@/lib/api";
 import { showServerUnavailable } from "@/lib/alerts";
 import { localTodayIso } from "@/lib/dates";
+import { BUILT_IN_CATEGORIES, fetchCategories } from "@/lib/categories";
 import { useProfile } from "@/lib/profile-context";
 import { EXPENSE_MESSAGES } from "@/lib/expense-messages";
 import { createRequestId } from "@/lib/request-id";
@@ -42,7 +42,9 @@ export default function AddExpenseScreen() {
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
   const [date, setDate] = useState(() => formatDisplayDate(localTodayIso()));
-  const [category, setCategory] = useState<ExpenseCategory>(DEFAULT_EXPENSE_CATEGORY);
+  // A built-in code or the id of one of the user's own categories (US-03).
+  const [category, setCategory] = useState<string>(DEFAULT_EXPENSE_CATEGORY);
+  const [categories, setCategories] = useState<CategoryOption[]>(BUILT_IN_CATEGORIES);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(DEFAULT_PAYMENT_METHOD);
   const [note, setNote] = useState("");
   const [touched, setTouched] = useState<Record<Field, boolean>>({ description: false, amount: false, date: false });
@@ -51,6 +53,21 @@ export default function AddExpenseScreen() {
   // One id per expense: a retry after a timeout reuses it, so the server saves the expense only once (CA-03.6).
   const requestId = useRef(createRequestId());
   const submitting = useRef(false);
+
+  // US-03: the user's categories (their own included); the built-in ones are shown until they load.
+  useEffect(() => {
+    let ignore = false;
+    fetchCategories()
+      .then((list) => {
+        if (!ignore) {
+          setCategories(list);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      ignore = true;
+    };
+  }, []);
 
   const normalizedAmount = parseAmount(amount);
   const isoDate = parseDisplayDate(date);
@@ -123,22 +140,24 @@ export default function AddExpenseScreen() {
           accessory={<Text style={styles.currency}>lei</Text>}
           error={errorFor("amount")}
         />
-        <TextField
+        {/* US-03: a calendar to pick the date (no future dates); today by default. */}
+        <DateTimeField
           label="Data plății"
+          mode="date"
           value={date}
-          onChangeText={setDate}
-          onBlur={touch("date")}
+          onChange={(value) => {
+            setDate(value);
+            touch("date")();
+          }}
+          maximumDate={new Date()}
           placeholder="ZZ.LL.AAAA"
-          keyboardType="numbers-and-punctuation"
-          maxLength={10}
           error={errorFor("date")}
         />
-        <SelectField
-          label="Categorie"
+        <CategoryField
           value={category}
-          options={EXPENSE_CATEGORIES}
-          labels={EXPENSE_CATEGORY_LABELS}
+          categories={categories}
           onChange={setCategory}
+          onCategoriesChange={setCategories}
         />
         <SegmentedField
           label="Cum ai plătit?"

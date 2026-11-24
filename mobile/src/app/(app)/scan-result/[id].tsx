@@ -324,10 +324,13 @@ const styles = StyleSheet.create({
     marginHorizontal: -spacing.lg,
     paddingHorizontal: spacing.lg,
   },
+  // Exact half-size radii: on Android (new architecture) a radius far larger than the view, like radius.full (9999),
+  // can be ignored and the stage icons showed as squares (2026-11-24).
   stageIndicator: {
     width: 24,
     height: 24,
-    borderRadius: radius.full,
+    borderRadius: 12,
+    overflow: "hidden",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -342,7 +345,7 @@ const styles = StyleSheet.create({
   stageDotPending: {
     width: 8,
     height: 8,
-    borderRadius: radius.full,
+    borderRadius: 4,
     backgroundColor: colors.borderStrong,
   },
   stageText: {

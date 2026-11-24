@@ -43,13 +43,29 @@ export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
 
 export const DEFAULT_PAYMENT_METHOD: PaymentMethod = "CASH";
 
-export const DOCUMENT_TYPES = ["MANUAL", "SCANNED"] as const;
+export const DOCUMENT_TYPES = ["MANUAL", "SCANNED", "SCANNED_INVOICE"] as const;
 
 export type DocumentType = (typeof DOCUMENT_TYPES)[number];
 
 export const DOCUMENT_TYPE_LABELS: Record<DocumentType, string> = {
   MANUAL: "Cheltuială manuală",
   SCANNED: "Bon scanat",
+  SCANNED_INVOICE: "Factură scanată",
+};
+
+/** US-03: a category name is 1-30 characters. */
+export const CATEGORY_NAME_MAX_LENGTH = 30;
+
+/** US-03: a category the user created is stored by its id (a cuid, e.g. "cmwujd9qb0000x4uoqhfkjt6x"). */
+export function isCustomCategoryId(value: unknown): value is string {
+  return typeof value === "string" && /^c[a-z0-9]{20,40}$/.test(value);
+}
+
+/** US-03: one category the user can choose: a built-in one (id = its code) or their own (id = its database id). */
+export type CategoryOption = {
+  id: string;
+  name: string;
+  builtIn: boolean;
 };
 
 export function isExpenseCategory(value: unknown): value is ExpenseCategory {
@@ -167,7 +183,8 @@ export type ManualExpenseInput = {
   description: string;
   amount: string;
   date: string;
-  category: ExpenseCategory;
+  /** A built-in code ("GROCERIES") or the id of one of the user's own categories (US-03). */
+  category: string;
   paymentMethod: PaymentMethod;
   note: string | null;
 };
@@ -199,7 +216,7 @@ export function validateManualExpense(body: unknown, today: string): ManualExpen
   }
 
   const category = data.category === undefined ? DEFAULT_EXPENSE_CATEGORY : data.category;
-  if (!isExpenseCategory(category)) {
+  if (!isExpenseCategory(category) && !isCustomCategoryId(category)) {
     fields.push("category");
   }
 
@@ -224,7 +241,7 @@ export function validateManualExpense(body: unknown, today: string): ManualExpen
       description,
       amount: amount as string,
       date: date as string,
-      category: category as ExpenseCategory,
+      category: category as string,
       paymentMethod: paymentMethod as PaymentMethod,
       note: note ? note : null,
     },

@@ -7,6 +7,12 @@ import { apiFetch } from "@/lib/api";
 import { EXPENSE_MESSAGES } from "@/lib/expense-messages";
 
 jest.mock("@/lib/api", () => ({ apiFetch: jest.fn() }));
+// US-03: the form loads the user's categories; these tests only count the save request, so the list comes from here.
+const mockFetchCategories = jest.fn();
+jest.mock("@/lib/categories", () => ({
+  ...jest.requireActual("@/lib/categories"),
+  fetchCategories: () => mockFetchCategories(),
+}));
 jest.mock("@/components/context-switcher", () => ({ ContextSwitcher: () => null }));
 jest.mock("@/components/account-menu", () => ({ AccountMenu: () => null }));
 const mockProfile = { activeContext: "personal" as "personal" | "company" };
@@ -51,6 +57,7 @@ function sentBody(call = 0) {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockFetchCategories.mockImplementation(async () => jest.requireActual("@/lib/categories").BUILT_IN_CATEGORIES);
   mockProfile.activeContext = "personal";
   jest.useFakeTimers({ now: NOW, doNotFake: ["nextTick", "setImmediate", "queueMicrotask"] });
   jest.spyOn(Alert, "alert").mockImplementation(() => {});
@@ -72,7 +79,7 @@ describe("Adaugă o cheltuială", () => {
   it("starts with today's date, Altele and Numerar, and Adaugă cheltuiala disabled", async () => {
     await render(<AddExpenseScreen />);
 
-    expect(screen.getByLabelText("Data plății")).toHaveDisplayValue("14.11.2026");
+    expect(screen.getByRole("button", { name: "Data plății: 14.11.2026" })).toBeOnTheScreen();
     expect(screen.getByRole("button", { name: "Categorie: Altele" })).toBeOnTheScreen();
     expect(screen.getByRole("radio", { name: "Numerar" })).toBeChecked();
     expect(addButton()).toBeDisabled();
@@ -132,14 +139,29 @@ describe("Adaugă o cheltuială", () => {
     expect(addButton()).toBeEnabled();
   });
 
-  it.each(["15.11.2026", "31.02.2026", "2026-11-14"])("CA-03.4: shows a message for the date %s", async (date) => {
+  it("CA-03.4 / US-03: the date is picked in a calendar that does not allow a date after today", async () => {
     await render(<AddExpenseScreen />);
 
-    await fillValidForm();
-    await fill("Data plății", date);
+    await fireEvent.press(screen.getByRole("button", { name: "Data plății: 14.11.2026" }));
 
-    expect(screen.getByText(EXPENSE_MESSAGES.date)).toBeOnTheScreen();
-    expect(addButton()).toBeDisabled();
+    const calendar = screen.getByTestId("date-time-picker");
+    expect(calendar.props.mode).toBe("date");
+    expect((calendar.props.maximumDate as Date).toDateString()).toBe(NOW.toDateString());
+  });
+
+  it("US-03: saves the date picked in the calendar", async () => {
+    apiFetchMock.mockResolvedValue({ ok: true, status: 201, json: async () => ({ document: {} }) });
+    await render(<AddExpenseScreen />);
+    await fillValidForm();
+
+    await fireEvent.press(screen.getByRole("button", { name: "Data plății: 14.11.2026" }));
+    await fireEvent(screen.getByTestId("date-time-picker"), "onChange", { type: "set" }, new Date(2026, 10, 3));
+    await fireEvent.press(screen.getByRole("button", { name: "Gata" }));
+
+    expect(screen.getByRole("button", { name: "Data plății: 03.11.2026" })).toBeOnTheScreen();
+    await fireEvent.press(addButton());
+    const save = apiFetchMock.mock.calls.find(([path]) => path === "/api/documents/manual");
+    expect(JSON.parse(save?.[1].body).date).toBe("2026-11-03");
   });
 
   it("CA-03.6: two quick taps send the expense only once", async () => {

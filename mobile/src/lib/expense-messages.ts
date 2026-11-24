@@ -47,6 +47,11 @@ export const SCAN_MESSAGES = {
 
 // US-11: checking the values read and saving the document.
 export const REVIEW_MESSAGES = {
+  /** US-09: "Factură" or "Bon fiscal", shown above what was read. */
+  documentKind: (label: string) => `Document citit: ${label}`,
+  /** US-09, invoices: "3 × 50,00 lei fără TVA + TVA 31,50 lei", under the line total with VAT. */
+  invoiceLine: (quantity: string, unitPrice: string, vatAmount: string) =>
+    `${quantity} × ${unitPrice} fără TVA + TVA ${vatAmount}`,
   verify: "Verifică",
   corrected: "Corectat",
   confirm: "E corect",
@@ -60,6 +65,9 @@ export const REVIEW_MESSAGES = {
   saveFailedTitle: "Nu am putut salva documentul",
   saveFailed: "Verifică datele și încearcă din nou.",
   photo: "Poza documentului",
+  photoOpen: "Atinge poza ca s-o vezi mare",
+  photoClose: "Închide",
+  photoUnavailable: "Poza nu a putut fi încărcată.",
   futureDate: "Data nu poate fi în viitor.",
   futureTime: "Ora nu poate fi în viitor.",
   invalidAmount: "Introdu o sumă cu cel mult două zecimale.",
@@ -85,4 +93,32 @@ export const IMPORT_MESSAGES = {
   } as Record<string, string>,
   unsupportedTitle: "Fișier nepotrivit",
   unsupported: "Alege o poză sau un PDF.",
+};
+
+/** US-03: the user's own categories. */
+export const CATEGORY_MESSAGES = {
+  title: "Categorie",
+  newLabel: "Categorie nouă",
+  newPlaceholder: "ex. Sală de sport",
+  add: "Adaugă categoria",
+  delete: (name: string) => `Șterge categoria ${name}`,
+  confirmTitle: "Ștergi categoria?",
+  confirmText: (name: string) => `„${name}” nu va mai apărea în listă.`,
+  confirmDelete: "Șterge",
+  cancel: "Renunță",
+  inUseTitle: "Categoria este folosită",
+  inUse: (count?: number) =>
+    count === 1
+      ? "O cheltuială are această categorie, așa că nu poate fi ștearsă."
+      : `${count ?? "Unele"} cheltuieli au această categorie, așa că nu poate fi ștearsă.`,
+  exists: "Există deja o categorie cu acest nume.",
+  invalid: "Scrie un nume de cel mult 30 de caractere.",
+  failedTitle: "Nu am putut salva categoria",
+  reorder: "Schimbă ordinea",
+  reorderHint: "Mută categoriile cu săgețile, apoi apasă Gata.",
+  done: "Gata",
+  moveUp: (name: string) => `Mută mai sus ${name}`,
+  moveDown: (name: string) => `Mută mai jos ${name}`,
+  orderFailedTitle: "Nu am putut salva ordinea",
+  orderFailed: "Încearcă din nou.",
 };

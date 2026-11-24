@@ -26,6 +26,7 @@ model User {
   company       Company?
   documents     Document[]
   files         File[]
+  categories    Category[]
 
   usageType String @default("PERSONAL")
 
@@ -92,14 +93,18 @@ model RateLimit {
 }
 
 model Profile {
-  id              String   @id @default(cuid())
-  userId          String   @unique
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  firstName       String?
-  lastName        String?
-  personalEnabled Boolean  @default(true)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id               String   @id @default(cuid())
+  userId           String   @unique
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  firstName        String?
+  lastName         String?
+  personalEnabled  Boolean  @default(true)
+  // US-03: built-in category codes the user hid (e.g. "EDUCATION"); they are no longer offered for new expenses.
+  hiddenCategories String[] @default([])
+  // US-03: the order the user put their categories in (built-in codes and their own category ids).
+  categoryOrder    String[] @default([])
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   @@map("profile")
 }
@@ -155,6 +160,11 @@ model DocumentLine {
   position   Int
   name       String
   amount     Decimal  @db.Decimal(12, 2)
+  // US-09, invoice lines only (null for manual expenses and receipts): what the invoice says. amount is the line
+  // total WITH VAT = unitPrice x quantity + vatAmount.
+  quantity   Decimal? @db.Decimal(12, 3)
+  unitPrice  Decimal? @db.Decimal(12, 2)
+  vatAmount  Decimal? @db.Decimal(12, 2)
   category   String
 
   @@index([documentId])
@@ -198,4 +208,16 @@ model OcrResult {
   updatedAt  DateTime @updatedAt
 
   @@map("ocr_result")
+}
+
+// US-03: a category the user created (besides the 9 built-in ones). Documents store its id as their category.
+model Category {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  createdAt DateTime @default(now())
+
+  @@unique([userId, name])
+  @@map("category")
 }

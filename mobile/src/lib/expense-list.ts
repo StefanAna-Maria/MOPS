@@ -69,7 +69,10 @@ export function dayLabel(isoDate: string, today: string): string {
 
 /** CA-04.3: "Alimente · Cheltuială manuală". */
 export function documentSubtitle(document: ExpenseDocument): string {
-  const category = isExpenseCategory(document.category) ? EXPENSE_CATEGORY_LABELS[document.category] : "Altele";
+  // US-03: the server names the category (a built-in label or the user's own category).
+  const category =
+    document.categoryName ??
+    (isExpenseCategory(document.category) ? EXPENSE_CATEGORY_LABELS[document.category] : "Altele");
   const type = DOCUMENT_TYPE_LABELS[document.type as DocumentType] ?? document.type;
   return `${category} · ${type}`;
 }

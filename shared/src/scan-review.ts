@@ -1,6 +1,7 @@
 import {
   MAX_AMOUNT_CENTS,
   isDescriptionValid,
+  isCustomCategoryId,
   isExpenseCategory,
   isIsoDate,
   isPaymentDateValid,
@@ -9,6 +10,7 @@ import {
   type ExpenseCategory,
   type PaymentMethod,
 } from "./expense.js";
+import type { DocumentKind } from "./scan.js";
 
 export function parseLineAmount(input: string): string | null {
   const match = /^(-?)(\d+)(?:[.,](\d{1,2}))?$/.exec(input.trim());
@@ -58,15 +60,15 @@ export function checkTotal(total: string | null, amounts: (string | null)[]): To
 }
 
 export function suggestCategory(
-  items: { amount: string | null; category: ExpenseCategory | null }[],
-): ExpenseCategory {
-  const spent = new Map<ExpenseCategory, number>();
+  items: { amount: string | null; category: string | null }[],
+): string {
+  const spent = new Map<string, number>();
   for (const item of items) {
     if (item.amount !== null && item.category !== null) {
       spent.set(item.category, (spent.get(item.category) ?? 0) + toCents(item.amount));
     }
   }
-  let best: ExpenseCategory = "OTHER";
+  let best: string = "OTHER";
   let bestCents = 0;
   for (const [category, cents] of spent) {
     if (cents > bestCents) {
@@ -79,17 +81,26 @@ export function suggestCategory(
 
 export type ScannedDocumentItem = {
   name: string;
+  /** The line total WITH VAT. */
   amount: string;
-  category: ExpenseCategory;
+  /** A built-in code or the id of one of the user's own categories (US-03). */
+  category: string;
+  /** US-09, invoice lines only: as read from the invoice. unitPrice is WITHOUT VAT; amount = unitPrice x quantity + vatAmount. */
+  quantity?: number | null;
+  unitPrice?: string | null;
+  vatAmount?: string | null;
 };
 
 export type ScannedDocumentInput = {
+  /** US-09: a receipt or an invoice (saved as type SCANNED or SCANNED_INVOICE). Missing means RECEIPT. */
+  documentKind?: DocumentKind;
   merchant: string;
   date: string;
   time: string | null;
   total: string;
   paymentMethod: PaymentMethod;
-  category: ExpenseCategory;
+  /** A built-in code or the id of one of the user's own categories (US-03). */
+  category: string;
   items: ScannedDocumentItem[];
 };
 
@@ -114,10 +125,26 @@ function readItem(raw: unknown): ScannedDocumentItem | null {
   const item = raw as Record<string, unknown>;
   const name = typeof item.name === "string" ? item.name.trim() : "";
   const amount = typeof item.amount === "string" ? parseLineAmount(item.amount) : null;
-  if (!isDescriptionValid(name) || !amount || !isExpenseCategory(item.category)) {
+  // A built-in code or the id of one of the user's own categories (US-03; the server checks it is theirs).
+  if (!isDescriptionValid(name) || !amount || !isCategoryValue(item.category)) {
     return null;
   }
-  return { name, amount, category: item.category };
+  const scanned: ScannedDocumentItem = { name, amount, category: item.category };
+  // Invoice details are optional; a value that is not a valid number is left out rather than refusing the document.
+  const quantity = typeof item.quantity === "number" && Number.isFinite(item.quantity) && item.quantity > 0 ? item.quantity : null;
+  const unitPrice = typeof item.unitPrice === "string" ? parseLineAmount(item.unitPrice) : null;
+  const vatAmount = typeof item.vatAmount === "string" ? parseLineAmount(item.vatAmount) : null;
+  if (quantity !== null || unitPrice !== null || vatAmount !== null) {
+    scanned.quantity = quantity;
+    scanned.unitPrice = unitPrice;
+    scanned.vatAmount = vatAmount;
+  }
+  return scanned;
+}
+
+/** A built-in category code or the id of one of the user's own categories. */
+function isCategoryValue(value: unknown): value is string {
+  return isExpenseCategory(value) || isCustomCategoryId(value);
 }
 
 export function validateScannedDocument(
@@ -154,7 +181,7 @@ export function validateScannedDocument(
     fields.push("paymentMethod");
   }
 
-  if (!isExpenseCategory(data.category)) {
+  if (!isCategoryValue(data.category)) {
     fields.push("category");
   }
 
@@ -176,12 +203,13 @@ export function validateScannedDocument(
   return {
     ok: true,
     value: {
+      documentKind: data.documentKind === "INVOICE" ? "INVOICE" : "RECEIPT",
       merchant,
       date: date as string,
       time: time as string | null,
       total: total as string,
       paymentMethod: data.paymentMethod as PaymentMethod,
-      category: data.category as ExpenseCategory,
+      category: data.category as string,
       items: validItems,
     },
   };

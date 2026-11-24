@@ -75,8 +75,8 @@ describe("POST /api/scans/:id/document", () => {
       fileId: scanId,
     });
     expect(document.lines).toEqual([
-      { id: expect.any(String), position: 1, name: "PARTY MIX 60G", amount: "29.37", category: "GROCERIES" },
-      { id: expect.any(String), position: 2, name: "DISCOUNT", amount: "-3.20", category: "GROCERIES" },
+      { id: expect.any(String), position: 1, name: "PARTY MIX 60G", amount: "29.37", category: "GROCERIES", quantity: null, unitPrice: null, vatAmount: null },
+      { id: expect.any(String), position: 2, name: "DISCOUNT", amount: "-3.20", category: "GROCERIES", quantity: null, unitPrice: null, vatAmount: null },
     ]);
   });
 
@@ -199,5 +199,101 @@ describe("POST /api/scans/:id/document", () => {
     expect(document.context).toBe("company");
     expect(companyList.documents).toHaveLength(1);
     expect(personalList.documents).toHaveLength(0);
+  });
+});
+
+describe("POST /api/scans/:id/document — invoices (US-09)", () => {
+  it("saves an invoice as Factură scanată, with each line's quantity, unit price without VAT and VAT", async () => {
+    const { email, cookie } = await createSignedInUser();
+    const scanId = await createScan(email);
+
+    const response = await save(
+      scanId,
+      checkedValues({
+        documentKind: "INVOICE",
+        merchant: "VANESSE SARL",
+        time: null,
+        total: "184.20",
+        paymentMethod: "CARD",
+        category: "SHOPPING",
+        items: [
+          { name: "Incarcator 100W", amount: "199.20", category: "SHOPPING", quantity: 1, unitPrice: "166.00", vatAmount: "33.20" },
+          { name: "Reducere voucher", amount: "-15.00", category: "SHOPPING", quantity: 1, unitPrice: null, vatAmount: "0.00" },
+        ],
+      }),
+      cookie,
+    );
+
+    expect(response.status).toBe(201);
+    const { document } = await response.json();
+    expect(document.type).toBe("SCANNED_INVOICE");
+    expect(document.total).toBe("184.20");
+    expect(document.lines).toEqual([
+      { id: expect.any(String), position: 1, name: "Incarcator 100W", amount: "199.20", category: "SHOPPING", quantity: "1", unitPrice: "166.00", vatAmount: "33.20" },
+      { id: expect.any(String), position: 2, name: "Reducere voucher", amount: "-15.00", category: "SHOPPING", quantity: "1", unitPrice: null, vatAmount: "0.00" },
+    ]);
+
+    // The detail screen gets the same values back.
+    const detail = await (await get(`/api/documents/${document.id}`, { cookie })).json();
+    expect(detail.document.lines[0]).toMatchObject({ quantity: "1", unitPrice: "166.00", vatAmount: "33.20" });
+  });
+
+  it("saves a receipt as Bon scanat, without invoice details", async () => {
+    const { email, cookie } = await createSignedInUser();
+    const scanId = await createScan(email);
+
+    const { document } = await (await save(scanId, checkedValues(), cookie)).json();
+
+    expect(document.type).toBe("SCANNED");
+    expect(document.lines[0]).toMatchObject({ quantity: null, unitPrice: null, vatAmount: null });
+  });
+});
+
+describe("POST /api/scans/:id/document — the user's own categories (US-03)", () => {
+  async function createCategory(name: string, cookie: string) {
+    const response = await send("POST", "/api/categories", { name }, { cookie });
+    expect(response.status).toBe(201);
+    return (await response.json()).category.id as string;
+  }
+
+  it("saves products and the document in one of the user's own categories, with its name", async () => {
+    const { email, cookie } = await createSignedInUser();
+    const gym = await createCategory("Sală de sport", cookie);
+    const scanId = await createScan(email);
+
+    const response = await save(
+      scanId,
+      checkedValues({
+        category: gym,
+        items: [
+          { name: "ABONAMENT", amount: "29.37", category: gym },
+          { name: "DISCOUNT", amount: "-3.20", category: "GROCERIES" },
+        ],
+      }),
+      cookie,
+    );
+
+    expect(response.status).toBe(201);
+    const { document } = await response.json();
+    expect(document.category).toBe(gym);
+    expect(document.categoryName).toBe("Sală de sport");
+    expect(document.lines.map((line: { category: string }) => line.category)).toEqual([gym, "GROCERIES"]);
+  });
+
+  it("refuses another user's category", async () => {
+    const other = await createSignedInUser();
+    const theirs = await createCategory("Pescuit", other.cookie);
+    const { email, cookie } = await createSignedInUser();
+    const scanId = await createScan(email);
+
+    const response = await save(
+      scanId,
+      checkedValues({ items: [{ name: "UNDITA", amount: "26.17", category: theirs }] }),
+      cookie,
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ code: "INVALID_DOCUMENT", fields: ["items"] });
+    expect(await prisma.document.count({ where: { fileId: scanId } })).toBe(0);
   });
 });

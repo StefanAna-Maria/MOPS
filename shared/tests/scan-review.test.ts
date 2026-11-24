@@ -104,6 +104,8 @@ describe("validateScannedDocument", () => {
     expect(validateScannedDocument(validDocument({ merchant: "  Carrefour Express " }), TODAY)).toEqual({
       ok: true,
       value: {
+        // US-09: a document sent without documentKind is a receipt.
+        documentKind: "RECEIPT",
         merchant: "Carrefour Express",
         date: "2026-11-12",
         time: "17:58",
@@ -169,5 +171,55 @@ describe("validateScannedDocument", () => {
 
   it("refuses something that is not a document", () => {
     expect(validateScannedDocument(null, TODAY).ok).toBe(false);
+  });
+});
+
+describe("validateScannedDocument — invoices (US-09)", () => {
+  const invoiceDocument = {
+    documentKind: "INVOICE",
+    merchant: "VANESSE SARL",
+    date: "2026-11-17",
+    time: null,
+    total: "184.20",
+    paymentMethod: "CARD",
+    category: "SHOPPING",
+    items: [
+      { name: "Incarcator multi-port 100W", amount: "199.20", category: "SHOPPING", quantity: 1, unitPrice: "166.00", vatAmount: "33.20" },
+      { name: "Reducere voucher", amount: "-15.00", category: "SHOPPING", quantity: 1, unitPrice: null, vatAmount: "0.00" },
+    ],
+  };
+
+  it("keeps the invoice kind and each line's quantity, unit price without VAT and VAT", () => {
+    const result = validateScannedDocument(invoiceDocument, TODAY);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.documentKind).toBe("INVOICE");
+    expect(result.value.items[0]).toEqual({
+      name: "Incarcator multi-port 100W",
+      amount: "199.20",
+      category: "SHOPPING",
+      quantity: 1,
+      unitPrice: "166.00",
+      vatAmount: "33.20",
+    });
+    expect(result.value.items[1]).toMatchObject({ unitPrice: null, vatAmount: "0.00" });
+  });
+
+  it("leaves out invoice details that are not valid numbers instead of refusing the document", () => {
+    const result = validateScannedDocument(
+      { ...invoiceDocument, items: [{ ...invoiceDocument.items[0], quantity: -2, unitPrice: "abc" }, invoiceDocument.items[1]] },
+      TODAY,
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.items[0]).toMatchObject({ quantity: null, unitPrice: null, vatAmount: "33.20" });
+  });
+
+  it("still checks that the line totals WITH VAT add up to the amount to pay", () => {
+    const result = validateScannedDocument({ ...invoiceDocument, total: "166.00" }, TODAY);
+
+    expect(result).toEqual({ ok: false, fields: ["itemsTotal"] });
   });
 });

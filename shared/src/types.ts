@@ -40,6 +40,10 @@ export type DocumentLine = {
   name: string;
   amount: string;
   category: string;
+  /** US-09, invoice lines only: the quantity, the price of one unit WITHOUT VAT and the line VAT (amount includes it). */
+  quantity?: string | null;
+  unitPrice?: string | null;
+  vatAmount?: string | null;
 };
 
 export type ExpenseDocument = {
@@ -52,6 +56,8 @@ export type ExpenseDocument = {
   time: string | null;
   total: string;
   category: string;
+  /** US-03: the category's name as shown (a built-in label or the name of the user's own category). */
+  categoryName?: string;
   paymentMethod: string;
   note: string | null;
   /** The scanned photo (GET /api/scans/:fileId/image), or null for a manual expense. */

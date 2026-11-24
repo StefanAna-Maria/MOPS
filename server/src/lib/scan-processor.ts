@@ -1,9 +1,12 @@
 import type { ScanStage } from "@ocrinvoice/shared";
 import type { Prisma } from "../generated/prisma/client.js";
 import { prisma } from "./prisma.js";
-import { OcrError, readReceipt } from "./ocr-client.js";
+import { OcrError, readReceipt, readReceiptPages, readReceiptText, type OcrAnswer } from "./ocr-client.js";
+import { extractPdfText, renderPagesAsPng } from "./pdf-render.js";
 import { parseOcrAnswer } from "./ocr-reading.js";
-import { readUpload } from "./uploads.js";
+import { buildOcrPrompt } from "./ocr-prompt.js";
+import { listCategories } from "./categories.js";
+import { readSourcePdf, readUpload } from "./uploads.js";
 
 /** Readings waiting or running in this server process, so tests (and a graceful shutdown) can wait for them. */
 const running = new Map<string, Promise<void>>();
@@ -21,6 +24,11 @@ let queue: Promise<void> = Promise.resolve();
 /** Waits until the reading of one file has finished (resolves at once when it is not waiting or running). */
 export async function waitForScan(fileId: string) {
   await running.get(fileId);
+}
+
+/** Waits until every queued reading has finished (tests: no reading from one test runs into the next). */
+export async function waitForAllScans() {
+  await queue;
 }
 
 /** Whether this server process is still going to finish the reading (false after a restart interrupted it). */
@@ -72,16 +80,21 @@ async function processScan(fileId: string, today: string) {
   try {
     stages.set(fileId, "READING");
     const file = await prisma.file.findUniqueOrThrow({ where: { id: fileId } });
-    const image = await readUpload(file.storageKey);
-    const answer = await readReceipt(image, file.mimeType, (partialText) => {
+    const onProgress = (partialText: string) => {
       stages.set(fileId, stageFromPartialOutput(partialText));
-    });
+    };
+    // US-03: the model chooses among the user's own categories (built-in ones they kept and the ones they added).
+    const categories = await listCategories(file.userId);
+    const prompt = buildOcrPrompt(categories.map((category) => category.name));
+    const answer = await readUpload(file.storageKey).then((image) =>
+      readFile(file.storageKey, image, file.mimeType, onProgress, prompt),
+    );
     rawOutput = answer.raw;
     model = answer.model;
     durationMs = answer.durationMs;
     stages.set(fileId, "EXTRACTING_FIELDS");
     stages.set(fileId, "EXTRACTING_ITEMS");
-    const reading = parseOcrAnswer(answer.raw, today);
+    const reading = parseOcrAnswer(answer.raw, today, categories);
     await prisma.ocrResult.update({
       where: { fileId },
       data: {
@@ -102,4 +115,35 @@ async function processScan(fileId: string, today: string) {
       .update({ where: { fileId }, data: { status: "FAILED", errorCode, rawOutput, model, durationMs } })
       .catch((updateError) => console.error(`Could not record the failure of scan ${fileId}`, updateError));
   }
+}
+
+/**
+ * US-09: reads an upload the best way for what it is:
+ * - a PDF with real text (generated invoices): the text of ALL its pages, exactly;
+ * - a PDF without text (a scanned paper document): a picture of each page (up to PDF_MAX_PAGES), read together;
+ * - a photo, or a one-page PDF without text: the picture itself.
+ */
+async function readFile(
+  storageKey: string,
+  image: Uint8Array,
+  mimeType: string,
+  onProgress: (partialText: string) => void,
+  prompt: string,
+): Promise<OcrAnswer> {
+  const pdf = await readSourcePdf(storageKey);
+  if (pdf) {
+    const text = extractPdfText(pdf);
+    if (text) {
+      return readReceiptText(text, onProgress, prompt);
+    }
+    const pages = renderPagesAsPng(pdf);
+    if (pages.length > 1) {
+      return readReceiptPages(
+        pages.map((bytes) => ({ bytes, mimeType: "image/png" })),
+        onProgress,
+        prompt,
+      );
+    }
+  }
+  return readReceipt(image, mimeType, onProgress, prompt);
 }
