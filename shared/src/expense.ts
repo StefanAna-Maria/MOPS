@@ -43,13 +43,14 @@ export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
 
 export const DEFAULT_PAYMENT_METHOD: PaymentMethod = "CASH";
 
-export const DOCUMENT_TYPES = ["MANUAL", "SCANNED"] as const;
+export const DOCUMENT_TYPES = ["MANUAL", "SCANNED", "SCANNED_INVOICE"] as const;
 
 export type DocumentType = (typeof DOCUMENT_TYPES)[number];
 
 export const DOCUMENT_TYPE_LABELS: Record<DocumentType, string> = {
   MANUAL: "Cheltuială manuală",
   SCANNED: "Bon scanat",
+  SCANNED_INVOICE: "Factură scanată",
 };
 
 export function isExpenseCategory(value: unknown): value is ExpenseCategory {

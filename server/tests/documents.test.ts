@@ -58,7 +58,7 @@ describe("POST /api/documents/manual", () => {
       note: "legume",
     });
     expect(document.lines).toEqual([
-      { id: expect.any(String), position: 1, name: "Piața Obor", amount: "12.50", category: "GROCERIES" },
+      { id: expect.any(String), position: 1, name: "Piața Obor", amount: "12.50", category: "GROCERIES", quantity: null, unitPrice: null, vatAmount: null },
     ]);
   });
 
@@ -337,7 +337,7 @@ describe("GET /api/documents/:id", () => {
       note: "rețetă",
     });
     expect(document.lines).toEqual([
-      { id: expect.any(String), position: 1, name: "Piața Obor", amount: "12.50", category: "HEALTH" },
+      { id: expect.any(String), position: 1, name: "Piața Obor", amount: "12.50", category: "HEALTH", quantity: null, unitPrice: null, vatAmount: null },
     ]);
   });
 

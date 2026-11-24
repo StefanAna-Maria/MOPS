@@ -40,6 +40,10 @@ export type DocumentLine = {
   name: string;
   amount: string;
   category: string;
+  /** US-09, invoice lines only: the quantity, the price of one unit WITHOUT VAT and the line VAT (amount includes it). */
+  quantity?: string | null;
+  unitPrice?: string | null;
+  vatAmount?: string | null;
 };
 
 export type ExpenseDocument = {

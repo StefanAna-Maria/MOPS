@@ -48,6 +48,10 @@ export function serializeDocument(document: DocumentWithLines): ExpenseDocument 
       name: line.name,
       amount: line.amount.toFixed(2),
       category: line.category,
+      // US-09: invoice lines only; null for manual expenses and receipts.
+      quantity: line.quantity === null ? null : line.quantity.toString(),
+      unitPrice: line.unitPrice === null ? null : line.unitPrice.toFixed(2),
+      vatAmount: line.vatAmount === null ? null : line.vatAmount.toFixed(2),
     })),
   };
 }

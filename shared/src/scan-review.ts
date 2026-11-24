@@ -9,6 +9,7 @@ import {
   type ExpenseCategory,
   type PaymentMethod,
 } from "./expense.js";
+import type { DocumentKind } from "./scan.js";
 
 export function parseLineAmount(input: string): string | null {
   const match = /^(-?)(\d+)(?:[.,](\d{1,2}))?$/.exec(input.trim());
@@ -79,11 +80,18 @@ export function suggestCategory(
 
 export type ScannedDocumentItem = {
   name: string;
+  /** The line total WITH VAT. */
   amount: string;
   category: ExpenseCategory;
+  /** US-09, invoice lines only: as read from the invoice. unitPrice is WITHOUT VAT; amount = unitPrice x quantity + vatAmount. */
+  quantity?: number | null;
+  unitPrice?: string | null;
+  vatAmount?: string | null;
 };
 
 export type ScannedDocumentInput = {
+  /** US-09: a receipt or an invoice (saved as type SCANNED or SCANNED_INVOICE). Missing means RECEIPT. */
+  documentKind?: DocumentKind;
   merchant: string;
   date: string;
   time: string | null;
@@ -117,7 +125,17 @@ function readItem(raw: unknown): ScannedDocumentItem | null {
   if (!isDescriptionValid(name) || !amount || !isExpenseCategory(item.category)) {
     return null;
   }
-  return { name, amount, category: item.category };
+  const scanned: ScannedDocumentItem = { name, amount, category: item.category };
+  // Invoice details are optional; a value that is not a valid number is left out rather than refusing the document.
+  const quantity = typeof item.quantity === "number" && Number.isFinite(item.quantity) && item.quantity > 0 ? item.quantity : null;
+  const unitPrice = typeof item.unitPrice === "string" ? parseLineAmount(item.unitPrice) : null;
+  const vatAmount = typeof item.vatAmount === "string" ? parseLineAmount(item.vatAmount) : null;
+  if (quantity !== null || unitPrice !== null || vatAmount !== null) {
+    scanned.quantity = quantity;
+    scanned.unitPrice = unitPrice;
+    scanned.vatAmount = vatAmount;
+  }
+  return scanned;
 }
 
 export function validateScannedDocument(
@@ -176,6 +194,7 @@ export function validateScannedDocument(
   return {
     ok: true,
     value: {
+      documentKind: data.documentKind === "INVOICE" ? "INVOICE" : "RECEIPT",
       merchant,
       date: date as string,
       time: time as string | null,
