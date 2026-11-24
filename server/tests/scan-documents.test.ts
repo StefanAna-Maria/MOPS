@@ -248,3 +248,52 @@ describe("POST /api/scans/:id/document — invoices (US-09)", () => {
     expect(document.lines[0]).toMatchObject({ quantity: null, unitPrice: null, vatAmount: null });
   });
 });
+
+describe("POST /api/scans/:id/document — the user's own categories (US-03)", () => {
+  async function createCategory(name: string, cookie: string) {
+    const response = await send("POST", "/api/categories", { name }, { cookie });
+    expect(response.status).toBe(201);
+    return (await response.json()).category.id as string;
+  }
+
+  it("saves products and the document in one of the user's own categories, with its name", async () => {
+    const { email, cookie } = await createSignedInUser();
+    const gym = await createCategory("Sală de sport", cookie);
+    const scanId = await createScan(email);
+
+    const response = await save(
+      scanId,
+      checkedValues({
+        category: gym,
+        items: [
+          { name: "ABONAMENT", amount: "29.37", category: gym },
+          { name: "DISCOUNT", amount: "-3.20", category: "GROCERIES" },
+        ],
+      }),
+      cookie,
+    );
+
+    expect(response.status).toBe(201);
+    const { document } = await response.json();
+    expect(document.category).toBe(gym);
+    expect(document.categoryName).toBe("Sală de sport");
+    expect(document.lines.map((line: { category: string }) => line.category)).toEqual([gym, "GROCERIES"]);
+  });
+
+  it("refuses another user's category", async () => {
+    const other = await createSignedInUser();
+    const theirs = await createCategory("Pescuit", other.cookie);
+    const { email, cookie } = await createSignedInUser();
+    const scanId = await createScan(email);
+
+    const response = await save(
+      scanId,
+      checkedValues({ items: [{ name: "UNDITA", amount: "26.17", category: theirs }] }),
+      cookie,
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ code: "INVALID_DOCUMENT", fields: ["items"] });
+    expect(await prisma.document.count({ where: { fileId: scanId } })).toBe(0);
+  });
+});

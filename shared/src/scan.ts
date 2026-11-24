@@ -1,4 +1,4 @@
-import type { DocumentContext, ExpenseCategory, PaymentMethod } from "./expense.js";
+import type { DocumentContext, PaymentMethod } from "./expense.js";
 
 /**
  * US-09: the automatic reading of a receipt photo. This is the contract between the server and the screens that
@@ -73,7 +73,8 @@ export type OcrItem = {
    * unitPrice × quantity + vatAmount.
    */
   amount: OcrField<string>;
-  category: OcrField<ExpenseCategory>;
+  /** A built-in code ("GROCERIES") or the id of one of the user's own categories (US-03). */
+  category: OcrField<string>;
   /** Invoices only: the price of one unit WITHOUT VAT, e.g. "10.00". Absent on receipts. */
   unitPrice?: OcrField<string>;
   /** Invoices only: the VAT of the whole line, e.g. "6.30". Absent on receipts. */

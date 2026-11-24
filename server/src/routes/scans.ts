@@ -8,6 +8,7 @@ import { resolveContext } from "../lib/context.js";
 import { detectImageType, readUpload, saveUpload, sourcePdfKeyFor, storageKeyFor } from "../lib/uploads.js";
 import { isPdf, renderPdfPicture } from "../lib/pdf-render.js";
 import { getScanStage, isScanPending, startScan } from "../lib/scan-processor.js";
+import { customCategoryNames, isUsersCategory } from "../lib/categories.js";
 import { documentWithLines, requestTimeZone, serializeDocument, utcDate } from "./documents.js";
 import {
   MAX_SCAN_FILE_BYTES,
@@ -214,7 +215,7 @@ scans.post("/:id/document", async (c) => {
     return c.json({ code: "SCAN_NOT_FOUND" }, 404);
   }
   if (file.document) {
-    return c.json({ document: serializeDocument(file.document) }, 200);
+    return c.json({ document: serializeDocument(file.document, await customCategoryNames(user.id)) }, 200);
   }
   if (file.ocrResult?.status !== "DONE") {
     return c.json({ code: "SCAN_NOT_READY" }, 409);
@@ -228,6 +229,19 @@ scans.post("/:id/document", async (c) => {
   }
 
   const values = result.value;
+  // US-03: the categories must be the user's own (built-in, or one they created); not someone else's.
+  const used = [...new Set([values.category, ...values.items.map((item) => item.category)])];
+  const owned = await Promise.all(used.map((category) => isUsersCategory(user.id, category)));
+  if (owned.includes(false)) {
+    const fields: string[] = [];
+    if (!owned[used.indexOf(values.category)]) {
+      fields.push("category");
+    }
+    if (values.items.some((item) => !owned[used.indexOf(item.category)])) {
+      fields.push("items");
+    }
+    return c.json({ code: "INVALID_DOCUMENT", fields }, 400);
+  }
   try {
     const created = await prisma.document.create({
       data: {
@@ -259,12 +273,12 @@ scans.post("/:id/document", async (c) => {
       },
       include: documentWithLines,
     });
-    return c.json({ document: serializeDocument(created) }, 201);
+    return c.json({ document: serializeDocument(created, await customCategoryNames(user.id)) }, 201);
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
       const saved = await prisma.document.findUnique({ where: { fileId: file.id }, include: documentWithLines });
       if (saved) {
-        return c.json({ document: serializeDocument(saved) }, 200);
+        return c.json({ document: serializeDocument(saved, await customCategoryNames(user.id)) }, 200);
       }
     }
     throw error;

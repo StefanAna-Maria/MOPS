@@ -8,7 +8,6 @@ import {
   suggestCategory,
   validateScannedDocument,
   type DocumentKind,
-  type ExpenseCategory,
   type OcrField,
   type OcrReading,
   type PaymentMethod,
@@ -38,7 +37,8 @@ export type ReviewItem = {
   name: ReviewField;
   /** The line total WITH VAT. */
   amount: ReviewField;
-  category: ReviewField<ExpenseCategory>;
+  /** A built-in code or the id of one of the user's own categories (US-03). */
+  category: ReviewField<string>;
   invoice?: InvoiceLineDetail;
 };
 
@@ -50,7 +50,7 @@ export type Review = {
   time: ReviewField;
   total: ReviewField;
   paymentMethod: ReviewField<PaymentMethod | null>;
-  category: ExpenseCategory;
+  category: string;
   items: ReviewItem[];
 };
 

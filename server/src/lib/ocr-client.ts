@@ -93,17 +93,20 @@ export function readReceipt(
   image: Uint8Array,
   mimeType: string,
   onProgress?: (partialText: string) => void,
+  /** US-03: the instructions with the user's categories (buildOcrPrompt). */
+  prompt: string = OCR_PROMPT,
 ): Promise<OcrAnswer> {
   // Photo FIRST, then the instructions: with the instructions first (to reuse them from llama.cpp's cache) the model
   // misread digits on a real phone photo (16,69 for 16,99; 2,85 for 6,79) in 2 of 2 tries; photo first read it
   // right in 2 of 2 (2026-11-24). Accuracy matters more than the ~10 s the cache would save.
-  return requestOcr([imagePart(image, mimeType), { type: "text", text: OCR_PROMPT }], onProgress);
+  return requestOcr([imagePart(image, mimeType), { type: "text", text: prompt }], onProgress);
 }
 
 /** US-09: several pages of one document (a PDF without text), read together as one document. */
 export function readReceiptPages(
   images: { bytes: Uint8Array; mimeType: string }[],
   onProgress?: (partialText: string) => void,
+  prompt: string = OCR_PROMPT,
 ): Promise<OcrAnswer> {
   const note =
     images.length > 1
@@ -111,7 +114,7 @@ export function readReceiptPages(
       : "";
   return requestOcr(
     // Pictures first, then the instructions (see readReceipt).
-    [...images.map((image) => imagePart(image.bytes, image.mimeType)), { type: "text", text: note + OCR_PROMPT }],
+    [...images.map((image) => imagePart(image.bytes, image.mimeType)), { type: "text", text: note + prompt }],
     onProgress,
   );
 }
@@ -120,7 +123,11 @@ export function readReceiptPages(
  * US-09: the text of a PDF (all its pages), read exactly instead of recognized from a picture. Generated invoices
  * (shops, marketplaces, e-Factura) have real text; it is faster than an image and has no misread digits.
  */
-export function readReceiptText(pages: string[], onProgress?: (partialText: string) => void): Promise<OcrAnswer> {
+export function readReceiptText(
+  pages: string[],
+  onProgress?: (partialText: string) => void,
+  prompt: string = OCR_PROMPT,
+): Promise<OcrAnswer> {
   const text = pages
     .map((page, index) => `--- Pagina ${index + 1} din ${pages.length} ---\n${page}`)
     .join("\n\n")
@@ -129,7 +136,7 @@ export function readReceiptText(pages: string[], onProgress?: (partialText: stri
     "Documentul NU este o imagine: mai jos este textul extras din fișierul PDF al documentului, pagină cu pagină (coloanele tabelelor pot apărea pe rânduri separate). Aplică aceleași reguli ca pentru o imagine.\n\n" +
     `<<<TEXTUL DOCUMENTULUI\n${text}\nSFÂRȘITUL TEXTULUI>>>\n\n`;
   // Instructions first, so they are reused from the previous reading; the document's text comes after them.
-  return requestOcr([{ type: "text", text: `${OCR_PROMPT}\n\n${documentText}${OCR_ANSWER_NOW}` }], onProgress);
+  return requestOcr([{ type: "text", text: `${prompt}\n\n${documentText}${OCR_ANSWER_NOW}` }], onProgress);
 }
 
 async function requestOcr(content: ContentPart[], onProgress?: (partialText: string) => void): Promise<OcrAnswer> {

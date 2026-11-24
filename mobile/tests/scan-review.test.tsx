@@ -9,6 +9,13 @@ import { fetchScan } from "@/lib/scan-upload";
 
 jest.mock("@/lib/scan-upload", () => ({ POLL_INTERVAL_MS: 2000, fetchScan: jest.fn() }));
 jest.mock("@/lib/api", () => ({ apiFetch: jest.fn() }));
+// US-03: the user's categories (built-in ones, plus "Sală de sport" of their own).
+const GYM = "cmgym0000000000000000000a";
+const mockFetchCategories = jest.fn();
+jest.mock("@/lib/categories", () => ({
+  ...jest.requireActual("@/lib/categories"),
+  fetchCategories: () => mockFetchCategories(),
+}));
 jest.mock("@/lib/auth-client", () => ({ authClient: { getCookie: jest.fn(async () => "session=abc") } }));
 
 jest.setTimeout(15_000);
@@ -70,6 +77,10 @@ const saveButton = () => screen.getByRole("button", { name: "Salvează documentu
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockFetchCategories.mockImplementation(async () => {
+    const builtIn = jest.requireActual("@/lib/categories").BUILT_IN_CATEGORIES;
+    return [...builtIn.slice(0, -1), { id: GYM, name: "Sală de sport", builtIn: false }, builtIn[builtIn.length - 1]];
+  });
   paramsMock.mockReturnValue({ id: "scan-1" });
 });
 
@@ -474,5 +485,45 @@ describe("US-06 / US-09: review screen changes (2026-11-24)", () => {
     await render(<ScanResultScreen />);
 
     expect(await screen.findByText("1 × 166,00 lei fără TVA + TVA 33,20 lei")).toBeOnTheScreen();
+  });
+});
+
+describe("US-03: the user's categories on a scanned document (2026-11-24)", () => {
+  const withGym = (category: string): OcrReading => ({
+    ...withoutDiscount,
+    total: { value: "29.37", confidence: 0.95 },
+    itemsTotal: "29.37",
+    totalMatches: true,
+    items: [{ ...reading.items[0], category: { value: category, confidence: 0.9 } }],
+  });
+
+  it("shows a product read in one of the user's own categories by its name, and saves its id", async () => {
+    apiFetchMock.mockResolvedValue({ ok: true, status: 201, json: async () => ({ document: { id: "doc-1" } }) });
+    await showReview(withGym(GYM));
+
+    expect(await screen.findByLabelText("Categoria produsului 1: Sală de sport")).toBeOnTheScreen();
+    await fireEvent.press(saveButton());
+
+    const body = JSON.parse(apiFetchMock.mock.calls[0][1].body);
+    expect(body.category).toBe(GYM);
+    expect(body.items[0].category).toBe(GYM);
+  });
+
+  it("lets the user pick one of their own categories for a product", async () => {
+    await showReview(withGym("GROCERIES"));
+    await screen.findByLabelText("Categoria produsului 1: Alimente");
+
+    await fireEvent.press(screen.getByLabelText("Categoria produsului 1: Alimente"));
+    await fireEvent.press(screen.getByRole("button", { name: "Sală de sport" }));
+
+    expect(screen.getByLabelText("Categoria produsului 1: Sală de sport")).toBeOnTheScreen();
+    expect(screen.getByLabelText("Categoria produsului 1: Corectat")).toBeOnTheScreen();
+  });
+
+  it("turns a category removed since the reading into Altele, to be checked", async () => {
+    await showReview(withGym("cmgone0000000000000000000a"));
+
+    expect(await screen.findByLabelText("Categoria produsului 1: Altele")).toBeOnTheScreen();
+    expect(screen.getByLabelText("Categoria produsului 1: Verifică")).toBeOnTheScreen();
   });
 });

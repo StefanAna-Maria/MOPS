@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import app from "../src/index.js";
 import { prisma } from "../src/lib/prisma.js";
 import { OcrError, readReceipt, readReceiptPages, readReceiptText } from "../src/lib/ocr-client.js";
-import { stageFromPartialOutput, waitForScan } from "../src/lib/scan-processor.js";
+import { stageFromPartialOutput, waitForAllScans, waitForScan } from "../src/lib/scan-processor.js";
 import { detectImageType } from "../src/lib/uploads.js";
 import { createSignedInUser, get, resetDatabase, send } from "./helpers.js";
 import { makePdf, pngSize } from "./pdf-fixture.js";
@@ -81,7 +81,8 @@ beforeEach(async () => {
 
 afterEach(async () => {
   pendingAnswers.splice(0).forEach((release) => release());
-  await new Promise((resolve) => setTimeout(resolve, 50));
+  // A reading started by the test (e.g. an upload it did not wait for) finishes before the next test.
+  await waitForAllScans();
 });
 
 describe("POST /api/scans", () => {

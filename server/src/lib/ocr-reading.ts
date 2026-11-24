@@ -1,10 +1,12 @@
 import {
   DESCRIPTION_MAX_LENGTH,
+  EXPENSE_CATEGORIES,
+  EXPENSE_CATEGORY_LABELS,
   isExpenseCategory,
   isIsoDate,
   isPaymentMethod,
+  type CategoryOption,
   type DocumentKind,
-  type ExpenseCategory,
   type OcrField,
   type OcrItem,
   type OcrReading,
@@ -118,11 +120,38 @@ function readPayment(field: RawField): OcrField<PaymentMethod> {
   return isPaymentMethod(normalized) ? { value: normalized, confidence: confidenceOf(field) } : missing();
 }
 
-function readCategory(field: RawField): OcrField<ExpenseCategory> {
-  const value = valueOf(field);
-  const normalized = typeof value === "string" ? value.trim().toUpperCase() : value;
-  return isExpenseCategory(normalized)
-    ? { value: normalized, confidence: confidenceOf(field) }
+/**
+ * US-03: resolves what the model wrote as a category: a NAME from the user's list ("Sală de sport", any case, with
+ * or without diacritics) or a built-in code ("GROCERIES", older answers). Unknown → Altele, to be checked.
+ */
+export type CategoryResolver = (value: unknown) => string | null;
+
+const plain = (text: string) => text.normalize("NFD").replace(/\p{Diacritic}/gu, "").trim().toLowerCase();
+
+export function categoryResolver(categories: readonly CategoryOption[]): CategoryResolver {
+  const byName = new Map(categories.map((category) => [plain(category.name), category.id]));
+  const ids = new Set(categories.map((category) => category.id));
+  return (value) => {
+    if (typeof value !== "string" || !value.trim()) {
+      return null;
+    }
+    const code = value.trim().toUpperCase();
+    if (isExpenseCategory(code) && ids.has(code)) {
+      return code;
+    }
+    return byName.get(plain(value)) ?? (ids.has(value.trim()) ? value.trim() : null);
+  };
+}
+
+/** The 9 built-in categories, for readings without a user's list (and older tests). */
+const BUILT_IN_RESOLVER = categoryResolver(
+  EXPENSE_CATEGORIES.map((code) => ({ id: code, name: EXPENSE_CATEGORY_LABELS[code], builtIn: true })),
+);
+
+function readCategory(field: RawField, resolve: CategoryResolver): OcrField<string> {
+  const category = resolve(valueOf(field));
+  return category !== null
+    ? { value: category, confidence: confidenceOf(field) }
     : { value: "OTHER", confidence: SUSPICIOUS };
 }
 
@@ -137,7 +166,11 @@ function readMoney(field: RawField): { field: OcrField<string>; cents: number | 
 /** Invoice lines may round unit price × quantity to the ban; allow that much difference. */
 const LINE_ROUNDING_CENTS = 1;
 
-function readItem(raw: unknown, isInvoice: boolean): (OcrItem & { cents: number | null }) | null {
+function readItem(
+  raw: unknown,
+  isInvoice: boolean,
+  resolve: CategoryResolver,
+): (OcrItem & { cents: number | null }) | null {
   if (typeof raw !== "object" || raw === null) {
     return null;
   }
@@ -154,7 +187,7 @@ function readItem(raw: unknown, isInvoice: boolean): (OcrItem & { cents: number 
   const read = readMoney(item.amount);
   let amount = read.field;
   let cents = read.cents;
-  const category = readCategory(item.category);
+  const category = readCategory(item.category, resolve);
 
   if (!isInvoice) {
     return { name, quantity, amount, category, cents };
@@ -229,11 +262,11 @@ function readDocumentKind(answer: Record<string, RawField>): DocumentKind {
  * ["15% REDUCERE", -4.9, "GROCERIES"], without its quantity): the name is the first text, the category the known
  * code, and the numbers are read as [amount], [quantity, amount] or, on a full invoice row, positionally.
  */
-function fromRow(row: unknown[]): Record<string, RawField> {
+function fromRow(row: unknown[], resolve: CategoryResolver): Record<string, RawField> {
   if (row.length >= 6) {
     return { name: row[0], quantity: row[1], amount: row[2], category: row[3], unitPrice: row[4], vatAmount: row[5] };
   }
-  const isCategory = (value: unknown) => typeof value === "string" && isExpenseCategory(value.trim().toUpperCase());
+  const isCategory = (value: unknown) => resolve(value) !== null;
   const name = row.find((value) => typeof value === "string" && !isCategory(value));
   const category = row.find(isCategory);
   const numbers = row.filter((value) => typeof value === "number" || (typeof value === "string" && toCents(value) !== null && !isCategory(value) && value !== name));
@@ -241,10 +274,10 @@ function fromRow(row: unknown[]): Record<string, RawField> {
   return { name, quantity, amount, category };
 }
 
-function fromCompact(answer: Record<string, RawField>): Record<string, RawField> {
+function fromCompact(answer: Record<string, RawField>, resolve: CategoryResolver): Record<string, RawField> {
   const items = Array.isArray(answer.items)
     ? answer.items.map((item) =>
-        Array.isArray(item) ? fromRow(item) : item,
+        Array.isArray(item) ? fromRow(item, resolve) : item,
       )
     : answer.items;
   return {
@@ -276,12 +309,13 @@ export function extractJson(raw: string): unknown {
  * confidence that the server lowers when its own checks fail. Throws OcrError UNREADABLE when nothing useful was
  * read. `today` is the user's date ("2026-11-15").
  */
-export function parseOcrAnswer(raw: string, today: string): OcrReading {
+export function parseOcrAnswer(raw: string, today: string, categories?: readonly CategoryOption[]): OcrReading {
+  const resolve = categories ? categoryResolver(categories) : BUILT_IN_RESOLVER;
   const data = extractJson(raw);
   if (typeof data !== "object" || data === null) {
     throw new OcrError("UNREADABLE", "The OCR answer is not an object");
   }
-  const answer = fromCompact(data as Record<string, RawField>);
+  const answer = fromCompact(data as Record<string, RawField>, resolve);
 
   const documentKind = readDocumentKind(answer);
   const merchant = readText(answer.merchant, DESCRIPTION_MAX_LENGTH);
@@ -295,7 +329,7 @@ export function parseOcrAnswer(raw: string, today: string): OcrReading {
   const paymentMethod = readPayment(answer.paymentMethod);
 
   const parsedItems = (Array.isArray(answer.items) ? answer.items : [])
-    .map((item) => readItem(item, documentKind === "INVOICE"))
+    .map((item) => readItem(item, documentKind === "INVOICE", resolve))
     .filter((item): item is NonNullable<typeof item> => item !== null);
 
   const itemsCents = parsedItems.reduce((sum, item) => sum + (item.cents ?? 0), 0);

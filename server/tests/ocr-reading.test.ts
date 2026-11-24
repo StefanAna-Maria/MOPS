@@ -505,3 +505,47 @@ describe("parseOcrAnswer — the model's receipt/invoice answer wins", () => {
     expect(reading.items[0]).not.toHaveProperty("unitPrice");
   });
 });
+
+describe("parseOcrAnswer — the user's own categories (US-03, 2026-11-24)", () => {
+  const GYM = "cmgym0000000000000000000a";
+  const categories = [
+    { id: "GROCERIES", name: "Alimente", builtIn: true },
+    { id: GYM, name: "Sală de sport", builtIn: false },
+    { id: "OTHER", name: "Altele", builtIn: true },
+  ];
+  const answer = (category: string) =>
+    JSON.stringify({
+      kind: "RECEIPT",
+      merchant: "World Class",
+      date: "2026-11-15",
+      time: "10:00",
+      total: 150,
+      payment: "CARD",
+      items: [{ name: "ABONAMENT", quantity: 1, amount: 150, category }],
+    });
+
+  it("maps a category name to the user's own category, whatever the case and diacritics", () => {
+    for (const written of ["Sală de sport", "sala de sport", "SALA DE SPORT"]) {
+      expect(parseOcrAnswer(answer(written), TODAY, categories).items[0].category).toEqual({ value: GYM, confidence: 0.9 });
+    }
+  });
+
+  it("maps a built-in name or code to its code", () => {
+    expect(parseOcrAnswer(answer("Alimente"), TODAY, categories).items[0].category.value).toBe("GROCERIES");
+    expect(parseOcrAnswer(answer("GROCERIES"), TODAY, categories).items[0].category.value).toBe("GROCERIES");
+  });
+
+  it("an unknown category, or a built-in one the user hid, becomes Altele to be checked", () => {
+    expect(parseOcrAnswer(answer("Fitness"), TODAY, categories).items[0].category).toEqual({ value: "OTHER", confidence: 0.4 });
+    expect(parseOcrAnswer(answer("Transport"), TODAY, categories).items[0].category).toEqual({ value: "OTHER", confidence: 0.4 });
+  });
+
+  it("recognises the user's category names in bare rows", () => {
+    const raw = JSON.stringify({ kind: "RECEIPT", merchant: "World Class", date: "2026-11-15", total: 150, items: [["ABONAMENT", 1, 150, "Sală de sport"]] });
+    expect(parseOcrAnswer(raw, TODAY, categories).items[0].category.value).toBe(GYM);
+  });
+
+  it("without a list, reads the built-in names (the default prompt)", () => {
+    expect(parseOcrAnswer(answer("Educație"), TODAY).items[0].category.value).toBe("EDUCATION");
+  });
+});
