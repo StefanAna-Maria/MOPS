@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { prisma } from "../lib/prisma.js";
 import { requireSession, type SessionVariables } from "../lib/session.js";
 import { resolveContext } from "../lib/context.js";
+import { categoryName, customCategoryNames, isUsersCategory } from "../lib/categories.js";
 import { Prisma } from "../generated/prisma/client.js";
 import {
   DEFAULT_TIME_ZONE,
@@ -28,7 +29,11 @@ export function utcDate(isoDate: string) {
   return new Date(`${isoDate}T00:00:00.000Z`);
 }
 
-export function serializeDocument(document: DocumentWithLines): ExpenseDocument {
+/** `customNames`: the user's own categories (US-03), to show their names; built-in ones are named from their code. */
+export function serializeDocument(
+  document: DocumentWithLines,
+  customNames: Map<string, string> = new Map(),
+): ExpenseDocument {
   return {
     id: document.id,
     context: document.companyId ? "company" : "personal",
@@ -38,6 +43,7 @@ export function serializeDocument(document: DocumentWithLines): ExpenseDocument 
     time: document.time,
     total: document.total.toFixed(2),
     category: document.category,
+    categoryName: categoryName(document.category, customNames),
     paymentMethod: document.paymentMethod,
     note: document.note,
     fileId: document.fileId,
@@ -82,6 +88,7 @@ documents.get("/", async (c) => {
   }
   const today = todayInTimeZone(requestTimeZone(c.req.header("X-Time-Zone")));
   const { start, end } = monthBounds(today);
+  const names = await customCategoryNames(user.id);
 
   const found = await prisma.document.findMany({
     where: { userId: user.id, companyId: context.companyId, date: { gte: utcDate(start), lt: utcDate(end) } },
@@ -89,7 +96,7 @@ documents.get("/", async (c) => {
     orderBy: [{ date: "desc" }, { time: { sort: "desc", nulls: "last" } }, { createdAt: "desc" }],
   });
 
-  return c.json({ month: start.slice(0, 7), documents: found.map(serializeDocument) });
+  return c.json({ month: start.slice(0, 7), documents: found.map((document) => serializeDocument(document, names)) });
 });
 
 // CA-06.1 / CA-06.2: one document with its lines. Another user's document gets the same 404 as a missing one,
@@ -103,7 +110,7 @@ documents.get("/:id", async (c) => {
   if (!document) {
     return c.json({ code: "DOCUMENT_NOT_FOUND" }, 404);
   }
-  return c.json({ document: serializeDocument(document) });
+  return c.json({ document: serializeDocument(document, await customCategoryNames(user.id)) });
 });
 
 documents.post("/manual", async (c) => {
@@ -120,6 +127,11 @@ documents.post("/manual", async (c) => {
   if (!result.ok) {
     return c.json({ code: "INVALID_EXPENSE", fields: result.fields }, 400);
   }
+  // US-03: a category the user created must be theirs (a built-in code is always fine).
+  if (!(await isUsersCategory(user.id, result.value.category))) {
+    return c.json({ code: "INVALID_EXPENSE", fields: ["category"] }, 400);
+  }
+  const names = await customCategoryNames(user.id);
 
   const context = await resolveContext(user.id, body?.context);
   if (!context.ok) {
@@ -129,7 +141,7 @@ documents.post("/manual", async (c) => {
   // CA-03.6: a retry or a second tap with the same request id returns the expense saved the first time.
   const existing = await findByRequestId(user.id, clientRequestId);
   if (existing) {
-    return c.json({ document: serializeDocument(existing) }, 200);
+    return c.json({ document: serializeDocument(existing, names) }, 200);
   }
 
   const expense = result.value;
@@ -153,13 +165,13 @@ documents.post("/manual", async (c) => {
       },
       include: documentWithLines,
     });
-    return c.json({ document: serializeDocument(created) }, 201);
+    return c.json({ document: serializeDocument(created, names) }, 201);
   } catch (error) {
     // Two identical requests raced past the lookup above; the unique index kept only one.
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
       const saved = await findByRequestId(user.id, clientRequestId);
       if (saved) {
-        return c.json({ document: serializeDocument(saved) }, 200);
+        return c.json({ document: serializeDocument(saved, names) }, 200);
       }
     }
     throw error;

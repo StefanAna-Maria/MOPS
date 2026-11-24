@@ -86,3 +86,31 @@ export const IMPORT_MESSAGES = {
   unsupportedTitle: "Fișier nepotrivit",
   unsupported: "Alege o poză sau un PDF.",
 };
+
+/** US-03: the user's own categories. */
+export const CATEGORY_MESSAGES = {
+  title: "Categorie",
+  newLabel: "Categorie nouă",
+  newPlaceholder: "ex. Sală de sport",
+  add: "Adaugă categoria",
+  delete: (name: string) => `Șterge categoria ${name}`,
+  confirmTitle: "Ștergi categoria?",
+  confirmText: (name: string) => `„${name}” nu va mai apărea în listă.`,
+  confirmDelete: "Șterge",
+  cancel: "Renunță",
+  inUseTitle: "Categoria este folosită",
+  inUse: (count?: number) =>
+    count === 1
+      ? "O cheltuială are această categorie, așa că nu poate fi ștearsă."
+      : `${count ?? "Unele"} cheltuieli au această categorie, așa că nu poate fi ștearsă.`,
+  exists: "Există deja o categorie cu acest nume.",
+  invalid: "Scrie un nume de cel mult 30 de caractere.",
+  failedTitle: "Nu am putut salva categoria",
+  reorder: "Schimbă ordinea",
+  reorderHint: "Mută categoriile cu săgețile, apoi apasă Gata.",
+  done: "Gata",
+  moveUp: (name: string) => `Mută mai sus ${name}`,
+  moveDown: (name: string) => `Mută mai jos ${name}`,
+  orderFailedTitle: "Nu am putut salva ordinea",
+  orderFailed: "Încearcă din nou.",
+};

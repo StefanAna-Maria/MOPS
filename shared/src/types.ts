@@ -56,6 +56,8 @@ export type ExpenseDocument = {
   time: string | null;
   total: string;
   category: string;
+  /** US-03: the category's name as shown (a built-in label or the name of the user's own category). */
+  categoryName?: string;
   paymentMethod: string;
   note: string | null;
   /** The scanned photo (GET /api/scans/:fileId/image), or null for a manual expense. */
