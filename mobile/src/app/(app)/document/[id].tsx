@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
@@ -8,9 +8,11 @@ import {
   isPaymentMethod,
   type ExpenseDocument,
 } from "@ocrinvoice/shared";
+import { DeleteDocumentSheet } from "@/components/delete-document-sheet";
 import { DocumentPhoto } from "@/components/document-photo";
 import { PrimaryButton } from "@/components/primary-button";
 import { apiFetch } from "@/lib/api";
+import { showServerUnavailable } from "@/lib/alerts";
 import { amountToCents, documentSubtitle, formatLei } from "@/lib/expense-list";
 import { DOCUMENT_MESSAGES, HOME_MESSAGES, REVIEW_MESSAGES } from "@/lib/expense-messages";
 import { colors, elevation, radius, spacing, typography } from "@/constants/theme";
@@ -134,6 +136,37 @@ export default function DocumentScreen() {
     setState(await fetchDocument(documentId));
   }, [documentId]);
 
+  const [confirming, setConfirming] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  async function handleDelete() {
+    if (deleting) {
+      return;
+    }
+    setDeleting(true);
+    try {
+      const response = await apiFetch(`/api/documents/${encodeURIComponent(documentId)}`, { method: "DELETE" });
+      if (response.status === 404) {
+        setConfirming(false);
+        Alert.alert(DOCUMENT_MESSAGES.notFound);
+        router.back();
+        return;
+      }
+      if (!response.ok) {
+        setConfirming(false);
+        Alert.alert(DOCUMENT_MESSAGES.deleteFailedTitle, DOCUMENT_MESSAGES.deleteFailed);
+        return;
+      }
+      setConfirming(false);
+      router.back();
+    } catch {
+      setConfirming(false);
+      showServerUnavailable();
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   return (
     <SafeAreaView style={styles.safeArea} edges={["top", "left", "right"]}>
       <View style={styles.header}>
@@ -158,7 +191,25 @@ export default function DocumentScreen() {
             <PrimaryButton title={HOME_MESSAGES.retry} variant="outline" onPress={retry} />
           </View>
         ) : null}
-        {state.status === "ok" ? <DocumentDetail document={state.document} /> : null}
+        {state.status === "ok" ? (
+          <>
+            <DocumentDetail document={state.document} />
+            <View style={styles.deleteArea}>
+              <PrimaryButton
+                title={DOCUMENT_MESSAGES.delete}
+                variant="dangerOutline"
+                onPress={() => setConfirming(true)}
+              />
+            </View>
+            <DeleteDocumentSheet
+              visible={confirming}
+              document={state.document}
+              deleting={deleting}
+              onConfirm={handleDelete}
+              onCancel={() => setConfirming(false)}
+            />
+          </>
+        ) : null}
       </ScrollView>
     </SafeAreaView>
   );
@@ -187,6 +238,12 @@ const styles = StyleSheet.create({
   content: {
     padding: spacing.lg,
     gap: spacing.lg,
+  },
+  deleteArea: {
+    marginTop: spacing.xl,
+    paddingTop: spacing.xl,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
   },
   summary: {
     gap: spacing.xs,
