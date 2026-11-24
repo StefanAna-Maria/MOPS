@@ -104,9 +104,13 @@ Testele automate ale serverului folosesc **o bază de date separată**, pentru c
 cp .env.example .env.test
 ```
 
-Completează-l la fel ca `.env`, dar cu adresele unei **ramuri Neon de test** (de exemplu `NEON_BRANCH="test"`) și **`NODE_ENV="test"`** (obligatoriu: în teste emailurile nu se trimit, ci sunt doar păstrate pentru verificare).
+Completează-l la fel ca `.env`, dar cu adresele **ramurii tale Neon de test** și **`NODE_ENV="test"`** (obligatoriu: în teste emailurile nu se trimit, ci sunt doar păstrate pentru verificare).
 
-> ⚠️ Nu pune în `.env.test` aceeași bază de date ca în `.env`: rularea testelor ți-ar șterge conturile și cheltuielile de dezvoltare.
+> ⚠️ **Fiecare coleg are nevoie de propria ramură de test.** În consola Neon: proiectul echipei → **Branches** → **Create branch**, cu un nume ca `test-ana`, `test-luisa` (pornită din `main` sau `dev`). Copiază adresele ei (cu și fără `-pooler`) în `.env.test` și pune `NEON_BRANCH="test-<numele-tău>"`.
+>
+> Testele șterg **toți** utilizatorii la fiecare pas. Dacă doi colegi rulează testele în același timp pe aceeași ramură, își șterg datele unul altuia și apar zeci de erori fără legătură cu codul (`ForeignKeyConstraintViolation`, `expected 401 to be 400`, „Invalid email or password”). S-a întâmplat pe 21.11.2026.
+>
+> Nu pune nici în `.env.test` aceeași bază de date ca în `.env`: rularea testelor ți-ar șterge conturile și cheltuielile de dezvoltare.
 
 ### 3.3 Creează tabelele în baza de date
 
@@ -271,7 +275,9 @@ Apoi repornește serverul (Ctrl+C și `npm run dev`) și Expo (Ctrl+C și `npx e
 | Nu primesc codul de confirmare pe email | Fără `RESEND_API_KEY` emailurile nu se trimit | Caută `[email-otp]` în fereastra serverului. |
 | `Documentul nu a putut fi citit. Serviciul de citire nu răspunde.` | llama.cpp nu rulează sau a rămas fără memorie | Pornește fereastra 3 (pasul 7.3), cu `-c 16384 -np 1`. Verifică http://127.0.0.1:8080/health. |
 | `Citirea a durat prea mult` | Calculator lent (fără placă video) sau bon foarte lung | Mărește `OCR_TIMEOUT_MS` în `server/.env` (de exemplu `600000` = 10 minute) și repornește serverul. |
+| Etapele de citire rămân la „Citim documentul” până la final | Serverul nu primește răspunsul llama.cpp pe bucăți (streaming) | Actualizează la ultima versiune din `main` (repararea din 21.11.2026) și repornește serverul. |
 | `Nu am putut trimite poza` | Poza nu a ajuns la server | Uită-te în fereastra Expo după linia `Scan upload failed:` — spune motivul exact. |
 | `Port 8081 is being used by another process` la Expo | A rămas pornit un Expo mai vechi | Închide celălalt terminal cu Expo sau răspunde `Y` ca să folosească alt port. |
+| Zeci de teste de server pică „aleator” (`ForeignKeyConstraintViolation`, `expected 401 to be 400`, „Invalid email or password”), de fiecare dată altele | Altcineva rulează testele în același timp pe aceeași ramură Neon de test | Folosește-ți propria ramură de test (pasul 3.2). |
 | Erori Prisma de tipul „table does not exist” | Lipsesc migrări | Din `server`: `npx prisma migrate deploy`. |
 | Erori TypeScript cu rute ca `/scan-result/[id]` | Lista de rute Expo nu e regenerată | Pornește o dată `npx expo start` (o regenerează), apoi încearcă din nou. |
