@@ -5,7 +5,10 @@ import { resolveContext } from "../lib/context.js";
 import { categoryName, customCategoryNames, isUsersCategory } from "../lib/categories.js";
 import { Prisma } from "../generated/prisma/client.js";
 import {
+  DEFAULT_DOCUMENT_FILTER,
   DEFAULT_TIME_ZONE,
+  DOCUMENT_FILTER_TYPES,
+  isDocumentFilter,
   isValidTimeZone,
   monthBounds,
   todayInTimeZone,
@@ -86,12 +89,23 @@ documents.get("/", async (c) => {
   if (!context.ok) {
     return c.json({ code: context.code }, context.status);
   }
+  // CA-15.1: ?type=ALL|RECEIPTS|INVOICES|MANUAL shows only one kind of document; nothing means all of them.
+  const filter = c.req.query("type") ?? DEFAULT_DOCUMENT_FILTER;
+  if (!isDocumentFilter(filter)) {
+    return c.json({ code: "INVALID_FILTER" }, 400);
+  }
+  const types = DOCUMENT_FILTER_TYPES[filter];
   const today = todayInTimeZone(requestTimeZone(c.req.header("X-Time-Zone")));
   const { start, end } = monthBounds(today);
   const names = await customCategoryNames(user.id);
 
   const found = await prisma.document.findMany({
-    where: { userId: user.id, companyId: context.companyId, date: { gte: utcDate(start), lt: utcDate(end) } },
+    where: {
+      userId: user.id,
+      companyId: context.companyId,
+      date: { gte: utcDate(start), lt: utcDate(end) },
+      ...(types ? { type: { in: [...types] } } : {}),
+    },
     include: documentWithLines,
     orderBy: [{ date: "desc" }, { time: { sort: "desc", nulls: "last" } }, { createdAt: "desc" }],
   });

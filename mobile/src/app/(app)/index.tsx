@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { ActivityIndicator, Pressable, SectionList, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
@@ -6,6 +7,8 @@ import { ContextSwitcher } from "@/components/context-switcher";
 import { AccountMenu } from "@/components/account-menu";
 import { PrimaryButton } from "@/components/primary-button";
 import { ExpenseRow } from "@/components/expense-row";
+import { DocumentFilters } from "@/components/document-filters";
+import { DEFAULT_DOCUMENT_FILTER, formatRecordCount, type DocumentFilter } from "@ocrinvoice/shared";
 import { getGreeting } from "@/lib/greeting";
 import { useProfile } from "@/lib/profile-context";
 import { localTodayIso } from "@/lib/dates";
@@ -31,7 +34,8 @@ function ListState({ state, onRetry }: { state: MonthDocumentsState; onRetry: ()
 
 export default function HomeScreen() {
   const { profile, activeContext } = useProfile();
-  const { state, retry } = useMonthDocuments(activeContext);
+  const [filter, setFilter] = useState<DocumentFilter>(DEFAULT_DOCUMENT_FILTER);
+  const { state, retry } = useMonthDocuments(activeContext, filter);
   const sections = state.status === "ok" ? groupByDay(state.documents, localTodayIso()) : [];
 
   return (
@@ -59,6 +63,12 @@ export default function HomeScreen() {
               {getGreeting()}, {profile?.firstName}
             </Text>
             <PrimaryButton title="Adaugă o cheltuială" onPress={() => router.push("/add-expense")} />
+            <View style={styles.filters}>
+              <DocumentFilters value={filter} onChange={setFilter} />
+              <Text style={styles.count} accessibilityLiveRegion="polite">
+                {state.status === "ok" ? formatRecordCount(state.documents.length) : " "}
+              </Text>
+            </View>
           </View>
         }
         ListEmptyComponent={<ListState state={state} onRetry={retry} />}
@@ -127,6 +137,13 @@ const styles = StyleSheet.create({
   top: {
     gap: spacing.xl,
     marginBottom: spacing.sm,
+  },
+  filters: {
+    gap: spacing.sm,
+  },
+  count: {
+    ...typography.bodySm,
+    color: colors.textSecondary,
   },
   greeting: {
     ...typography.headlineXl,

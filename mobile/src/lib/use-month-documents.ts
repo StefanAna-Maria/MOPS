@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from "react";
 import { useFocusEffect } from "expo-router";
-import type { DocumentContext, ExpenseDocument } from "@ocrinvoice/shared";
+import type { DocumentContext, DocumentFilter, ExpenseDocument } from "@ocrinvoice/shared";
 import { apiFetch } from "./api";
 
 export type MonthDocumentsState =
@@ -8,21 +8,23 @@ export type MonthDocumentsState =
   | { status: "error" }
   | { status: "ok"; documents: ExpenseDocument[] };
 
-type LoadedState = { context: DocumentContext; state: MonthDocumentsState };
+type LoadedState = { key: string; state: MonthDocumentsState };
 
 /**
- * The current month's documents of one profile (GET /api/documents?context=…). Reloads every time the screen
- * comes into focus and whenever the profile changes; the personal and company lists are never mixed.
+ * The current month's documents of one profile (GET /api/documents?context=…&type=…). Reloads every time the screen
+ * comes into focus and whenever the profile or the filter (US-15) changes; the personal and company lists are never
+ * mixed.
  */
-export function useMonthDocuments(context: DocumentContext) {
-  const [loaded, setLoaded] = useState<LoadedState>({ context, state: { status: "loading" } });
+export function useMonthDocuments(context: DocumentContext, filter: DocumentFilter = "ALL") {
+  const key = `${context}:${filter}`;
+  const [loaded, setLoaded] = useState<LoadedState>({ key, state: { status: "loading" } });
   const latestRequest = useRef(0);
 
   const load = useCallback(async () => {
     const request = ++latestRequest.current;
     let next: MonthDocumentsState;
     try {
-      const response = await apiFetch(`/api/documents?context=${context}`);
+      const response = await apiFetch(`/api/documents?context=${context}&type=${filter}`);
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
@@ -31,16 +33,16 @@ export function useMonthDocuments(context: DocumentContext) {
     } catch {
       next = { status: "error" };
     }
-    // Only the newest request may update the screen (e.g. after switching profiles quickly).
+    // Only the newest request may update the screen (e.g. after switching profiles or filters quickly).
     if (request === latestRequest.current) {
-      setLoaded({ context, state: next });
+      setLoaded({ key: `${context}:${filter}`, state: next });
     }
-  }, [context]);
+  }, [context, filter]);
 
   const retry = useCallback(() => {
-    setLoaded({ context, state: { status: "loading" } });
+    setLoaded({ key: `${context}:${filter}`, state: { status: "loading" } });
     return load();
-  }, [context, load]);
+  }, [context, filter, load]);
 
   useFocusEffect(
     useCallback(() => {
@@ -48,7 +50,7 @@ export function useMonthDocuments(context: DocumentContext) {
     }, [load]),
   );
 
-  // Right after switching profiles, show loading instead of the other profile's documents.
-  const state: MonthDocumentsState = loaded.context === context ? loaded.state : { status: "loading" };
+  // Right after switching profiles or filters, show loading instead of the previous list.
+  const state: MonthDocumentsState = loaded.key === key ? loaded.state : { status: "loading" };
   return { state, retry };
 }

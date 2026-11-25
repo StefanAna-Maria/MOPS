@@ -77,13 +77,16 @@ describe("Acasă", () => {
 
 describe("Acasă - cheltuielile lunii", () => {
   beforeEach(() => {
-    jest.useFakeTimers({ now: new Date(2026, 10, 14, 12, 0), doNotFake: ["nextTick", "setImmediate", "queueMicrotask"] });
+    jest.useFakeTimers({
+      now: new Date(2026, 10, 14, 12, 0),
+      doNotFake: ["nextTick", "setImmediate", "queueMicrotask"],
+    });
   });
 
   it("CA-04.1: loads this month's documents from the server", async () => {
     await render(<HomeScreen />);
 
-    expect(apiFetchMock).toHaveBeenCalledWith("/api/documents?context=personal");
+    expect(apiFetchMock).toHaveBeenCalledWith("/api/documents?context=personal&type=ALL");
   });
 
   it("CA-04.1 / CA-04.2: groups the documents by day with each day's total", async () => {
@@ -162,8 +165,8 @@ describe("Acasă - profilul personal și firma", () => {
 
     await render(<HomeScreen />);
 
-    expect(apiFetchMock).toHaveBeenCalledWith("/api/documents?context=company");
-    expect(apiFetchMock).not.toHaveBeenCalledWith("/api/documents?context=personal");
+    expect(apiFetchMock).toHaveBeenCalledWith("/api/documents?context=company&type=ALL");
+    expect(apiFetchMock).not.toHaveBeenCalledWith("/api/documents?context=personal&type=ALL");
   });
 
   it("reloads the list for the other profile after switching, without showing the old one", async () => {
@@ -176,14 +179,88 @@ describe("Acasă - profilul personal și firma", () => {
     mockProfile.activeContext = "company";
     await view.rerender(<HomeScreen />);
 
-    expect(apiFetchMock).toHaveBeenLastCalledWith("/api/documents?context=company");
+    expect(apiFetchMock).toHaveBeenLastCalledWith("/api/documents?context=company&type=ALL");
     expect(screen.queryByText("Cumpărături personale")).toBeNull();
 
     resolveCompany({
       ok: true,
       status: 200,
-      json: async () => ({ documents: [{ ...doc("c", "Consumabile birou", "2026-11-14", "20.00"), context: "company" }] }),
+      json: async () => ({
+        documents: [{ ...doc("c", "Consumabile birou", "2026-11-14", "20.00"), context: "company" }],
+      }),
     });
     expect(await screen.findByText("Consumabile birou")).toBeOnTheScreen();
+  });
+});
+
+describe("Acasă - filtrele după tipul documentului (US-15)", () => {
+  const receipt = { ...doc("1", "Mega Image", "2026-11-14", "18.28"), type: "SCANNED" };
+  const invoice = { ...doc("2", "eMAG", "2026-11-14", "321.98", "SHOPPING"), type: "SCANNED_INVOICE" };
+  const manual = doc("3", "Piața Obor", "2026-11-13", "12.50");
+
+  beforeEach(() => {
+    jest.useFakeTimers({
+      now: new Date(2026, 10, 14, 12, 0),
+      doNotFake: ["nextTick", "setImmediate", "queueMicrotask"],
+    });
+    apiFetchMock.mockImplementation(async (path: string) => {
+      const type = new URLSearchParams(path.split("?")[1]).get("type");
+      const documents =
+        type === "RECEIPTS"
+          ? [receipt]
+          : type === "INVOICES"
+            ? [invoice]
+            : type === "MANUAL"
+              ? [manual]
+              : [receipt, invoice, manual];
+      return { ok: true, status: 200, json: async () => ({ month: "2026-11", documents }) };
+    });
+  });
+
+  it("CA-15.1: shows Toate, Bonuri, Facturi and Manuale, with Toate selected", async () => {
+    await render(<HomeScreen />);
+
+    for (const name of ["Toate", "Bonuri", "Facturi", "Manuale"]) {
+      expect(screen.getByRole("tab", { name })).toBeOnTheScreen();
+    }
+    expect(screen.queryByRole("tab", { name: "Chitanțe" })).toBeNull();
+    expect(screen.getByRole("tab", { name: "Toate" })).toBeSelected();
+    expect(await screen.findByText("3 înregistrări")).toBeOnTheScreen();
+  });
+
+  it("CA-15.1: Facturi shows only the invoices", async () => {
+    await render(<HomeScreen />);
+    await screen.findByText("Mega Image");
+
+    await fireEvent.press(screen.getByRole("tab", { name: "Facturi" }));
+
+    expect(apiFetchMock).toHaveBeenLastCalledWith("/api/documents?context=personal&type=INVOICES");
+    expect(await screen.findByText("eMAG")).toBeOnTheScreen();
+    expect(screen.queryByText("Mega Image")).toBeNull();
+    expect(screen.queryByText("Piața Obor")).toBeNull();
+    expect(screen.getByRole("tab", { name: "Facturi" })).toBeSelected();
+  });
+
+  it("CA-15.2: the number of records follows the filter", async () => {
+    await render(<HomeScreen />);
+    expect(await screen.findByText("3 înregistrări")).toBeOnTheScreen();
+
+    await fireEvent.press(screen.getByRole("tab", { name: "Manuale" }));
+
+    expect(await screen.findByText("1 înregistrare")).toBeOnTheScreen();
+  });
+
+  it("a filter with nothing in it says so", async () => {
+    apiFetchMock.mockImplementation(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ month: "2026-11", documents: [] }),
+    }));
+    await render(<HomeScreen />);
+
+    await fireEvent.press(screen.getByRole("tab", { name: "Bonuri" }));
+
+    expect(await screen.findByText(HOME_MESSAGES.empty)).toBeOnTheScreen();
+    expect(screen.getByText("0 înregistrări")).toBeOnTheScreen();
   });
 });
