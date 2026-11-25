@@ -53,6 +53,40 @@ export const DOCUMENT_TYPE_LABELS: Record<DocumentType, string> = {
   SCANNED_INVOICE: "Factură scanată",
 };
 
+/** US-15: the filters above the list on Acasă, and the document types each one shows (null = all of them). */
+export const DOCUMENT_FILTERS = ["ALL", "RECEIPTS", "INVOICES", "MANUAL"] as const;
+
+export type DocumentFilter = (typeof DOCUMENT_FILTERS)[number];
+
+export const DOCUMENT_FILTER_LABELS: Record<DocumentFilter, string> = {
+  ALL: "Toate",
+  RECEIPTS: "Bonuri",
+  INVOICES: "Facturi",
+  MANUAL: "Manuale",
+};
+
+export const DOCUMENT_FILTER_TYPES: Record<DocumentFilter, readonly DocumentType[] | null> = {
+  ALL: null,
+  RECEIPTS: ["SCANNED"],
+  INVOICES: ["SCANNED_INVOICE"],
+  MANUAL: ["MANUAL"],
+};
+
+export const DEFAULT_DOCUMENT_FILTER: DocumentFilter = "ALL";
+
+export function isDocumentFilter(value: unknown): value is DocumentFilter {
+  return typeof value === "string" && (DOCUMENT_FILTERS as readonly string[]).includes(value);
+}
+
+/** CA-15.2: "1 înregistrare", "5 înregistrări", "20 de înregistrări" (Romanian puts "de" after 20, 21, … 100, …). */
+export function formatRecordCount(count: number): string {
+  if (count === 1) {
+    return "1 înregistrare";
+  }
+  const lastTwo = count % 100;
+  return lastTwo >= 1 && lastTwo <= 19 ? `${count} înregistrări` : count === 0 ? "0 înregistrări" : `${count} de înregistrări`;
+}
+
 /** US-03: a category name is 1-30 characters. */
 export const CATEGORY_NAME_MAX_LENGTH = 30;
 
