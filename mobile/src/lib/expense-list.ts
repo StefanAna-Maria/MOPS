@@ -1,5 +1,11 @@
-import { isExpenseCategory, type ExpenseDocument } from "@ocrinvoice/shared";
+import {
+  amountToCents,
+  isExpenseCategory,
+  type ExpenseDocument,
+} from "@ocrinvoice/shared";
 import { formatMoney, getLanguage, t } from "@/i18n";
+
+export { amountToCents };
 
 export type DaySection = {
   date: string;
@@ -7,15 +13,6 @@ export type DaySection = {
   totalCents: number;
   data: ExpenseDocument[];
 };
-
-/** "12.50" → 1250. Amounts come from the server with exactly two decimals. */
-export function amountToCents(amount: string): number {
-  // Discounts read from receipts are negative ("-3.20"): the sign applies to the decimals too.
-  const negative = amount.trim().startsWith("-");
-  const [units, decimals = ""] = amount.trim().replace(/^-/, "").split(".");
-  const cents = Number(units) * 100 + Number(decimals.padEnd(2, "0").slice(0, 2));
-  return negative ? -cents : cents;
-}
 
 /** CA-17.3: 123450 → "1.234,50 lei" in Romanian, "1,234.50 RON" in English (see formatMoney). */
 export function formatLei(cents: number): string {

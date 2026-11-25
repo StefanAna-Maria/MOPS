@@ -65,3 +65,33 @@ export type ExpenseDocument = {
   createdAt: string;
   lines: DocumentLine[];
 };
+
+/** US-05 / US-16: total spent in one category during the current month. */
+export type CategoryBreakdownItem = {
+  category: string;
+  categoryName: string;
+  total: string;
+  /** US-16: integer percentage share of the current month's total; shares across all categories sum to 100%. */
+  percent: number;
+  count: number;
+};
+
+/** US-05: current month's spending summary and variation compared to the previous month. */
+export type MonthSummary = {
+  /** YYYY-MM of the current month (e.g. "2026-11"). */
+  month: string;
+  /** Exact total of all documents in the current month for the active profile, with two decimals ("1234.50"). */
+  total: string;
+  /** Number of documents in the current month for the active profile. */
+  count: number;
+  /** YYYY-MM of the previous month (e.g. "2026-10"). */
+  previousMonth: string;
+  /** Exact total of the previous month for the active profile, or null when there were no expenses last month. */
+  previousTotal: string | null;
+  /** Percentage variation vs. previous month (> 0 spent more, < 0 spent less, 0 same), or null without previous month expenses. */
+  variationPercent: number | null;
+  /** Current month's spending grouped by category, sorted descending by total. */
+  byCategory: CategoryBreakdownItem[];
+  /** Previous month's spending grouped by category, sorted descending by total (empty when no previous month expenses). */
+  previousByCategory: CategoryBreakdownItem[];
+};

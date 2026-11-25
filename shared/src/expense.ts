@@ -291,6 +291,109 @@ export function monthBounds(isoDate: string): { start: string; end: string } {
   return { start: `${year}-${pad(month)}-01`, end: `${nextYear}-${pad(nextMonth)}-01` };
 }
 
+/** US-05: the calendar month immediately before `isoDate`: its first day and the first day of `isoDate`'s month (exclusive). */
+export function previousMonthBounds(isoDate: string): { start: string; end: string } {
+  const [year, month] = isoDate.split("-").map(Number);
+  const prevYear = month === 1 ? year - 1 : year;
+  const prevMonth = month === 1 ? 12 : month - 1;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return { start: `${prevYear}-${pad(prevMonth)}-01`, end: `${year}-${pad(month)}-01` };
+}
+
+/** US-05: lowercase Romanian month names for "Cheltuit în {lună}" and "față de {lună}". */
+export const ROMANIAN_MONTH_NAMES = [
+  "ianuarie",
+  "februarie",
+  "martie",
+  "aprilie",
+  "mai",
+  "iunie",
+  "iulie",
+  "august",
+  "septembrie",
+  "octombrie",
+  "noiembrie",
+  "decembrie",
+] as const;
+
+/** "2026-11" or "2026-11-14" → "noiembrie". */
+export function monthNameRo(yearMonthOrDate: string): string {
+  const [, monthStr] = yearMonthOrDate.split("-");
+  const index = Number(monthStr) - 1;
+  return ROMANIAN_MONTH_NAMES[index] ?? yearMonthOrDate;
+}
+
+/** "12.50" → 1250, "-3.20" → -320. Exact integer-ban conversion with no floating-point error (CA-05.3). */
+export function amountToCents(amount: string): number {
+  const trimmed = amount.trim();
+  const negative = trimmed.startsWith("-");
+  const [units, decimals = ""] = trimmed.replace(/^-/, "").split(".");
+  const cents = Number(units) * 100 + Number(decimals.padEnd(2, "0").slice(0, 2));
+  return negative ? -cents : cents;
+}
+
+/** 1250 → "12.50", 0 → "0.00", -320 → "-3.20". Exact integer-ban formatting with two decimals (CA-05.3). */
+export function centsToAmount(cents: number): string {
+  const sign = cents < 0 ? "-" : "";
+  const abs = Math.abs(Math.round(cents));
+  const units = Math.floor(abs / 100);
+  const decimals = String(abs % 100).padStart(2, "0");
+  return `${sign}${units}.${decimals}`;
+}
+
+/**
+ * CA-05.2: percentage change from `previousCents` to `currentCents`.
+ * Returns null when there were no expenses in the previous month (`previousCents` is null or <= 0).
+ * Positive means spent more (red), negative means spent less (green), 0 means identical.
+ */
+export function monthVariationPercent(currentCents: number, previousCents: number | null): number | null {
+  if (previousCents === null || previousCents <= 0) {
+    return null;
+  }
+  if (currentCents === previousCents) {
+    return 0;
+  }
+  const raw = ((currentCents - previousCents) / previousCents) * 100;
+  const rounded = Math.round(raw);
+  if (rounded !== 0) {
+    return rounded;
+  }
+  // Tiny non-zero difference (< 0.5%): keep one decimal so the sign and color stay faithful to the true direction.
+  const oneDecimal = Number(raw.toFixed(1));
+  return oneDecimal !== 0 ? oneDecimal : raw > 0 ? 0.1 : -0.1;
+}
+
+/** CA-05.2: formats a variation percentage for display: 18 → "+18%", -12 → "-12%", 0 → "0%", 0.2 → "+0,2%". */
+export function formatVariationPercent(percent: number): string {
+  const sign = percent > 0 ? "+" : "";
+  const formatted = Number.isInteger(percent) ? String(percent) : percent.toFixed(1).replace(".", ",");
+  return `${sign}${formatted}%`;
+}
+
+/**
+ * CA-16.2: computes integer percentage shares that sum to exactly 100% using the largest-remainder method.
+ * Input values must be non-negative cents; returns an array of integers matching the input order.
+ */
+export function computeCategoryShares(centsList: readonly number[]): number[] {
+  const total = centsList.reduce((sum, cents) => sum + cents, 0);
+  if (centsList.length === 0 || total <= 0) {
+    return centsList.map(() => 0);
+  }
+  const exact = centsList.map((cents) => (cents / total) * 100);
+  const floors = exact.map((value) => Math.floor(value));
+  let remaining = 100 - floors.reduce((sum, value) => sum + value, 0);
+
+  const order = exact
+    .map((value, index) => ({ index, remainder: value - floors[index], cents: centsList[index] }))
+    .sort((a, b) => b.remainder - a.remainder || b.cents - a.cents || a.index - b.index);
+
+  const shares = [...floors];
+  for (let i = 0; i < remaining; i += 1) {
+    shares[order[i].index] += 1;
+  }
+  return shares;
+}
+
 /** Which profile a document belongs to: the personal one, or the user's company. */
 export const DOCUMENT_CONTEXTS = ["personal", "company"] as const;
 
