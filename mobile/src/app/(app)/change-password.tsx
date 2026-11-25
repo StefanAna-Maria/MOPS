@@ -7,13 +7,15 @@ import { PasswordField } from "@/components/password-field";
 import { PasswordChecklist } from "@/components/password-checklist";
 import { PrimaryButton } from "@/components/primary-button";
 import { SuccessMessage } from "@/components/success-message";
-import { TextLink } from "@/components/text-link";
+import { BackLink } from "@/components/back-link";
 import { authClient } from "@/lib/auth-client";
 import { showServerUnavailable, showTooManyAttempts } from "@/lib/alerts";
 import { isStrongPassword } from "@ocrinvoice/shared";
 import { colors, typography } from "@/constants/theme";
+import { useT } from "@/i18n";
 
 export default function ChangePasswordScreen() {
+  const t = useT();
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmation, setConfirmation] = useState("");
@@ -37,13 +39,13 @@ export default function ChangePasswordScreen() {
         if (error.status === 429) {
           showTooManyAttempts();
         } else if (error.code === "INVALID_PASSWORD") {
-          Alert.alert("Parola curentă este greșită", "Verifică parola curentă și încearcă din nou.");
+          Alert.alert(t.changePassword.wrongCurrentTitle, t.changePassword.wrongCurrent);
         } else if (error.code === "PASSWORD_SAME_AS_CURRENT") {
-          Alert.alert("Parola coincide cu cea curentă!", "Alege o parolă diferită de cea curentă.");
+          Alert.alert(t.changePassword.sameAsCurrent, t.changePassword.sameAsCurrentHint);
         } else if (error.code === "PASSWORD_TOO_WEAK") {
-          Alert.alert("Parolă prea slabă", "Parola nouă trebuie să respecte toate cele trei reguli.");
+          Alert.alert(t.password.tooWeakTitle, t.password.newTooWeak);
         } else {
-          Alert.alert("Nu am putut schimba parola", "Încearcă din nou.");
+          Alert.alert(t.changePassword.failedTitle, t.common.tryAgain);
         }
         return;
       }
@@ -58,44 +60,44 @@ export default function ChangePasswordScreen() {
   if (changed) {
     return (
       <SuccessMessage
-        title="Parola a fost schimbată cu succes!"
-        message="Celelalte dispozitive au fost deconectate."
-        buttonTitle="Revino în aplicație"
+        title={t.changePassword.doneTitle}
+        message={t.changePassword.done}
+        buttonTitle={t.changePassword.backToApp}
         onPress={() => router.back()}
       />
     );
   }
 
   return (
-    <Screen title="Schimbă parola" subtitle="Celelalte dispozitive vor fi deconectate.">
+    <Screen title={t.changePassword.title} subtitle={t.changePassword.subtitle}>
       <Card>
         <PasswordField
-          label="Parola curentă"
+          label={t.changePassword.current}
           value={currentPassword}
           onChangeText={setCurrentPassword}
           autoComplete="current-password"
           textContentType="password"
         />
         <PasswordField
-          label="Parola nouă"
+          label={t.changePassword.next}
           value={newPassword}
           onChangeText={setNewPassword}
           autoComplete="new-password"
           textContentType="newPassword"
         />
-        {sameAsCurrent ? <Text style={styles.error}>Parola coincide cu cea curentă!</Text> : null}
+        {sameAsCurrent ? <Text style={styles.error}>{t.changePassword.sameAsCurrent}</Text> : null}
         <PasswordChecklist password={newPassword} />
         <PasswordField
-          label="Confirmare parola nouă"
+          label={t.changePassword.confirm}
           value={confirmation}
           onChangeText={setConfirmation}
           autoComplete="new-password"
           textContentType="newPassword"
         />
-        {mismatch ? <Text style={styles.error}>Parolele nu coincid.</Text> : null}
-        <PrimaryButton title="Schimbă parola" onPress={handleChange} disabled={!canSubmit} loading={loading} />
+        {mismatch ? <Text style={styles.error}>{t.changePassword.mismatch}</Text> : null}
+        <PrimaryButton title={t.changePassword.title} onPress={handleChange} disabled={!canSubmit} loading={loading} />
       </Card>
-      <TextLink href="/">Renunță</TextLink>
+      <BackLink>{t.common.cancel}</BackLink>
     </Screen>
   );
 }

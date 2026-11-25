@@ -1,9 +1,11 @@
 import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { colors } from "@/constants/theme";
+import { useT } from "@/i18n";
 
 export function AppLoader() {
+  const t = useT();
   return (
-    <View style={styles.container} accessibilityLabel="Se încarcă">
+    <View style={styles.container} accessibilityLabel={t.common.loading}>
       <ActivityIndicator size="large" color={colors.primary} />
     </View>
   );

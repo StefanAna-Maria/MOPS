@@ -2,12 +2,7 @@ import { useCallback, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
-import {
-  PAYMENT_METHOD_LABELS,
-  formatDisplayDate,
-  isPaymentMethod,
-  type ExpenseDocument,
-} from "@ocrinvoice/shared";
+import { isPaymentMethod, type ExpenseDocument } from "@ocrinvoice/shared";
 import { DeleteDocumentSheet } from "@/components/delete-document-sheet";
 import { DocumentPhoto } from "@/components/document-photo";
 import { PrimaryButton } from "@/components/primary-button";
@@ -16,6 +11,7 @@ import { showServerUnavailable } from "@/lib/alerts";
 import { amountToCents, documentSubtitle, formatLei } from "@/lib/expense-list";
 import { DOCUMENT_MESSAGES, EDIT_MESSAGES, HOME_MESSAGES, REVIEW_MESSAGES } from "@/lib/expense-messages";
 import { colors, elevation, radius, spacing, typography } from "@/constants/theme";
+import { formatDate, useT } from "@/i18n";
 
 type DocumentState =
   | { status: "loading" }
@@ -49,13 +45,14 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 }
 
 function DocumentDetail({ document }: { document: ExpenseDocument }) {
+  const t = useT();
   // An invoice has a date but no time (a time saved with one would only be when it was checked, not the invoice's).
   const isInvoice = document.type === "SCANNED_INVOICE";
-  const date = formatDisplayDate(document.date) + (document.time && !isInvoice ? `, ${document.time}` : "");
+  const date = formatDate(document.date) + (document.time && !isInvoice ? `, ${document.time}` : "");
   // A manual expense has exactly one line, named like the expense: listing it again under PRODUSE adds nothing.
   const showProducts = document.type !== "MANUAL";
   const payment = isPaymentMethod(document.paymentMethod)
-    ? PAYMENT_METHOD_LABELS[document.paymentMethod]
+    ? t.payments[document.paymentMethod]
     : document.paymentMethod;
 
   return (
@@ -70,14 +67,14 @@ function DocumentDetail({ document }: { document: ExpenseDocument }) {
 
       <View style={styles.card}>
         <DetailRow label="Data" value={date} />
-        <DetailRow label="Plată" value={payment} />
+        <DetailRow label={t.document.payment} value={payment} />
         {/* A manual expense always shows its note; a scanned one only when the user added one (US-13). */}
-        {document.type === "MANUAL" || document.note ? <DetailRow label="Notă" value={document.note ?? "—"} /> : null}
+        {document.type === "MANUAL" || document.note ? <DetailRow label={t.document.note} value={document.note ?? "—"} /> : null}
       </View>
 
       {showProducts ? (
         <>
-      <Text style={styles.sectionTitle}>PRODUSE</Text>
+      <Text style={styles.sectionTitle}>{t.document.products}</Text>
       <View style={styles.card}>
         {document.lines.map((line, index) => (
           <View key={line.id} style={[styles.lineRow, index > 0 && styles.lineDivider]}>
@@ -103,7 +100,7 @@ function DocumentDetail({ document }: { document: ExpenseDocument }) {
 
       {document.fileId ? (
         <>
-          <Text style={styles.sectionTitle}>POZA</Text>
+          <Text style={styles.sectionTitle}>{t.document.photo}</Text>
           <DocumentPhoto fileId={document.fileId} />
         </>
       ) : null}
@@ -112,6 +109,7 @@ function DocumentDetail({ document }: { document: ExpenseDocument }) {
 }
 
 export default function DocumentScreen() {
+  const t = useT();
   const { id } = useLocalSearchParams<{ id: string }>();
   const [state, setState] = useState<DocumentState>({ status: "loading" });
 
@@ -176,17 +174,17 @@ export default function DocumentScreen() {
       <View style={styles.header}>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Înapoi"
+          accessibilityLabel={t.common.back}
           onPress={() => router.back()}
           hitSlop={8}
           style={({ pressed }) => pressed && styles.pressed}
         >
-          <Text style={styles.back}>‹ Înapoi</Text>
+          <Text style={styles.back}>{t.common.backArrow}</Text>
         </Pressable>
       </View>
       <ScrollView contentContainerStyle={styles.content}>
         {state.status === "loading" ? (
-          <ActivityIndicator style={styles.state} color={colors.primary} accessibilityLabel="Se încarcă" />
+          <ActivityIndicator style={styles.state} color={colors.primary} accessibilityLabel={t.common.loading} />
         ) : null}
         {state.status === "notFound" ? <Text style={styles.stateText}>{DOCUMENT_MESSAGES.notFound}</Text> : null}
         {state.status === "error" ? (

@@ -2,6 +2,7 @@ import type React from "react";
 import { useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { colors, radius, spacing, typography } from "@/constants/theme";
+import { useT } from "@/i18n";
 
 export const CODE_LENGTH = 6;
 
@@ -13,6 +14,7 @@ type CodeInputProps = {
 
 // One real (invisible) input drives six boxes, so pasting and the SMS/email autofill keep working.
 export function CodeInput({ value, onChangeText, editable = true }: CodeInputProps) {
+  const t = useT();
   const inputRef = useRef<React.ComponentRef<typeof TextInput>>(null);
   const [focused, setFocused] = useState(false);
 
@@ -28,7 +30,7 @@ export function CodeInput({ value, onChangeText, editable = true }: CodeInputPro
       })}
       <TextInput
         ref={inputRef}
-        accessibilityLabel="Cod de confirmare"
+        accessibilityLabel={t.code.label}
         value={value}
         onChangeText={(text) => onChangeText(text.replace(/\D/g, "").slice(0, CODE_LENGTH))}
         editable={editable}

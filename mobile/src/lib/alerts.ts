@@ -1,9 +1,12 @@
 import { Alert } from "react-native";
+import { t } from "@/i18n";
 
 export function showServerUnavailable() {
-  Alert.alert("Serverul nu răspunde", "Verifică conexiunea la internet și încearcă din nou.");
+  const { common } = t();
+  Alert.alert(common.serverUnavailableTitle, common.serverUnavailable);
 }
 
 export function showTooManyAttempts() {
-  Alert.alert("Prea multe încercări", "Ai încercat de prea multe ori. Așteaptă un minut și încearcă din nou.");
+  const { common } = t();
+  Alert.alert(common.tooManyAttemptsTitle, common.tooManyAttempts);
 }

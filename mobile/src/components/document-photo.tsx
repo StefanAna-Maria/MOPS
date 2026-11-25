@@ -4,6 +4,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { apiFetch } from "@/lib/api";
 import { REVIEW_MESSAGES } from "@/lib/expense-messages";
 import { colors, radius, spacing, typography } from "@/constants/theme";
+import { useT } from "@/i18n";
 
 /** Bytes → base64, in chunks (a receipt photo is a few hundred KB). */
 export function bytesToBase64(bytes: Uint8Array): string {
@@ -26,6 +27,7 @@ const RECEIPT_ASPECT_RATIO = 0.6;
  * (2026-11-24). Shown at its real proportions; tapping it opens it full screen.
  */
 export function DocumentPhoto({ fileId }: { fileId: string }) {
+  const t = useT();
   const [state, setState] = useState<PhotoState>({ status: "loading" });
   const [fullScreen, setFullScreen] = useState(false);
   const [aspectRatio, setAspectRatio] = useState(RECEIPT_ASPECT_RATIO);
@@ -58,7 +60,7 @@ export function DocumentPhoto({ fileId }: { fileId: string }) {
   if (state.status === "loading") {
     return (
       <View style={[styles.frame, styles.placeholder]}>
-        <ActivityIndicator color={colors.primary} accessibilityLabel="Se încarcă poza" />
+        <ActivityIndicator color={colors.primary} accessibilityLabel={t.review.photoLoading} />
       </View>
     );
   }

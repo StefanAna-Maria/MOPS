@@ -2,6 +2,7 @@ import { authClient } from "./auth-client";
 import { API_URL, REQUEST_TIMEOUT } from "./config";
 import { deviceTimeZone } from "./dates";
 import { fetchWithTimeout } from "./fetch-with-timeout";
+import { getLanguage } from "@/i18n";
 
 type ApiFetchOptions = {
   /** How long to wait before giving up (default REQUEST_TIMEOUT); uploads need longer on slow networks. */
@@ -22,6 +23,7 @@ export async function apiFetch(path: string, init: RequestInit = {}, options: Ap
         ...(isUpload ? {} : { "Content-Type": "application/json" }),
         Cookie: cookie,
         ...(timeZone ? { "X-Time-Zone": timeZone } : {}),
+        "Accept-Language": getLanguage(),
         ...init.headers,
       },
     },

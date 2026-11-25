@@ -1,56 +1,27 @@
-import { useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text } from "react-native";
 import { router } from "expo-router";
-import { BottomSheet } from "@/components/bottom-sheet";
-import { SheetOption } from "@/components/sheet-option";
-import { authClient } from "@/lib/auth-client";
 import { useProfile } from "@/lib/profile-context";
-import { signOut } from "@/lib/sign-out";
+import { useT } from "@/i18n";
 import { colors, radius, typography } from "@/constants/theme";
 
+export function initialsOf(firstName?: string | null, lastName?: string | null) {
+  return [firstName, lastName].map((part) => part?.trim().charAt(0).toUpperCase() ?? "").join("");
+}
+
+/** The circle with the user's initials on Acasă; it opens "Contul meu" (account, preferences, sign out). */
 export function AccountMenu() {
-  const { data: session } = authClient.useSession();
+  const t = useT();
   const { profile } = useProfile();
-  const [open, setOpen] = useState(false);
-
-  const fullName = [profile?.firstName, profile?.lastName].filter(Boolean).join(" ");
-  const initials = [profile?.firstName, profile?.lastName]
-    .map((part) => part?.trim().charAt(0).toUpperCase() ?? "")
-    .join("");
-
-  function handleChangePassword() {
-    setOpen(false);
-    router.push("/change-password");
-  }
-
-  async function handleSignOut() {
-    setOpen(false);
-    try {
-      await signOut();
-    } catch {
-      return;
-    }
-  }
 
   return (
-    <>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Contul meu"
-        onPress={() => setOpen(true)}
-        style={({ pressed }) => [styles.avatar, pressed && styles.pressed]}
-      >
-        <Text style={styles.initials}>{initials}</Text>
-      </Pressable>
-      <BottomSheet visible={open} title="Contul meu" onClose={() => setOpen(false)}>
-        <View style={styles.identity}>
-          <Text style={styles.name}>{fullName}</Text>
-          <Text style={styles.email}>{session?.user.email}</Text>
-        </View>
-        <SheetOption title="Schimbă parola" onPress={handleChangePassword} />
-        <SheetOption title="Deconectează-te" tone="danger" onPress={handleSignOut} />
-      </BottomSheet>
-    </>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={t.account.title}
+      onPress={() => router.push("/settings")}
+      style={({ pressed }) => [styles.avatar, pressed && styles.pressed]}
+    >
+      <Text style={styles.initials}>{initialsOf(profile?.firstName, profile?.lastName)}</Text>
+    </Pressable>
   );
 }
 
@@ -69,16 +40,5 @@ const styles = StyleSheet.create({
   initials: {
     ...typography.label,
     color: colors.white,
-  },
-  identity: {
-    gap: 2,
-  },
-  name: {
-    ...typography.headlineSm,
-    color: colors.textPrimary,
-  },
-  email: {
-    ...typography.bodyMd,
-    color: colors.textSecondary,
   },
 });

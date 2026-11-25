@@ -8,7 +8,7 @@ import { AccountMenu } from "@/components/account-menu";
 import { PrimaryButton } from "@/components/primary-button";
 import { ExpenseRow } from "@/components/expense-row";
 import { DocumentFilters } from "@/components/document-filters";
-import { DEFAULT_DOCUMENT_FILTER, formatRecordCount, type DocumentFilter } from "@ocrinvoice/shared";
+import { DEFAULT_DOCUMENT_FILTER, type DocumentFilter } from "@ocrinvoice/shared";
 import { getGreeting } from "@/lib/greeting";
 import { useProfile } from "@/lib/profile-context";
 import { localTodayIso } from "@/lib/dates";
@@ -16,10 +16,12 @@ import { formatLei, groupByDay } from "@/lib/expense-list";
 import { HOME_MESSAGES } from "@/lib/expense-messages";
 import { useMonthDocuments, type MonthDocumentsState } from "@/lib/use-month-documents";
 import { colors, radius, spacing, typography } from "@/constants/theme";
+import { useT } from "@/i18n";
 
 function ListState({ state, onRetry }: { state: MonthDocumentsState; onRetry: () => void }) {
+  const t = useT();
   if (state.status === "loading") {
-    return <ActivityIndicator style={styles.state} color={colors.primary} accessibilityLabel="Se încarcă" />;
+    return <ActivityIndicator style={styles.state} color={colors.primary} accessibilityLabel={t.common.loading} />;
   }
   if (state.status === "error") {
     return (
@@ -33,6 +35,7 @@ function ListState({ state, onRetry }: { state: MonthDocumentsState; onRetry: ()
 }
 
 export default function HomeScreen() {
+  const t = useT();
   const { profile, activeContext } = useProfile();
   const [filter, setFilter] = useState<DocumentFilter>(DEFAULT_DOCUMENT_FILTER);
   const { state, retry } = useMonthDocuments(activeContext, filter);
@@ -62,11 +65,11 @@ export default function HomeScreen() {
             <Text style={styles.greeting}>
               {getGreeting()}, {profile?.firstName}
             </Text>
-            <PrimaryButton title="Adaugă o cheltuială" onPress={() => router.push("/add-expense")} />
+            <PrimaryButton title={t.home.addExpense} onPress={() => router.push("/add-expense")} />
             <View style={styles.filters}>
               <DocumentFilters value={filter} onChange={setFilter} />
               <Text style={styles.count} accessibilityLiveRegion="polite">
-                {state.status === "ok" ? formatRecordCount(state.documents.length) : " "}
+                {state.status === "ok" ? t.home.recordCount(state.documents.length) : " "}
               </Text>
             </View>
           </View>
@@ -90,7 +93,7 @@ export default function HomeScreen() {
       <View style={styles.fabContainer}>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Fotografiază un bon"
+          accessibilityLabel={t.home.scan}
           onPress={() => router.push("/scan")}
           style={({ pressed }) => [styles.scanFab, pressed && styles.scanFabPressed]}
         >

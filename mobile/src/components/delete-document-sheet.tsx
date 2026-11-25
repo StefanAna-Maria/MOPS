@@ -1,11 +1,12 @@
 import { StyleSheet, Text, View } from "react-native";
 import Ionicons from "@expo/vector-icons/Ionicons";
-import { formatDisplayDate, type ExpenseDocument } from "@ocrinvoice/shared";
+import { type ExpenseDocument } from "@ocrinvoice/shared";
 import { BottomSheet } from "@/components/bottom-sheet";
 import { PrimaryButton } from "@/components/primary-button";
 import { amountToCents, formatLei } from "@/lib/expense-list";
 import { DOCUMENT_MESSAGES } from "@/lib/expense-messages";
 import { colors, radius, spacing, typography } from "@/constants/theme";
+import { formatDate, useT } from "@/i18n";
 
 type DeleteDocumentSheetProps = {
   visible: boolean;
@@ -16,7 +17,8 @@ type DeleteDocumentSheetProps = {
 };
 
 export function DeleteDocumentSheet({ visible, document, deleting, onConfirm, onCancel }: DeleteDocumentSheetProps) {
-  const summary = `${document.merchant}, ${formatLei(amountToCents(document.total))}, din ${formatDisplayDate(document.date)},`;
+  const t = useT();
+  const summary = t.document.summary(document.merchant, formatLei(amountToCents(document.total)), formatDate(document.date));
 
   return (
     <BottomSheet visible={visible} title={DOCUMENT_MESSAGES.confirmTitle} onClose={deleting ? () => {} : onCancel}>

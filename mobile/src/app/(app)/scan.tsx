@@ -32,11 +32,13 @@ import { useImportDocument } from "@/lib/use-import-document";
 import { useProfile } from "@/lib/profile-context";
 import { uploadScan } from "@/lib/scan-upload";
 import { colors, radius, spacing, typography } from "@/constants/theme";
+import { useT } from "@/i18n";
 
 const CORNER_SIZE = 28;
 const CORNER_THICKNESS = 4;
 
 export default function ScanScreen() {
+  const t = useT();
   const [permission, requestPermission] = useCameraPermissions();
   const isFocused = useIsFocused();
   const windowDimensions = useWindowDimensions();
@@ -103,21 +105,21 @@ export default function ScanScreen() {
               </Text>
               <Text style={styles.permissionDescription}>
                 {isPermanentlyDenied
-                  ? "Ai refuzat accesul la cameră. Pentru a fotografia un bon și a nu-l mai păstra pe hârtie, activează permisiunea din setările telefonului."
-                  : "Avem nevoie de acces la cameră pentru a fotografia bonurile și facturile tale, ca să nu le mai păstrezi pe hârtie."}
+                  ? t.camera.permissionDenied
+                  : t.camera.permissionNeeded}
               </Text>
             </View>
             <View style={styles.permissionActions}>
               {isPermanentlyDenied ? (
                 <PrimaryButton
-                  title="Deschide setările"
+                  title={t.camera.openSettings}
                   onPress={() => {
                     void Linking.openSettings();
                   }}
                 />
               ) : (
                 <PrimaryButton
-                  title="Permite accesul"
+                  title={t.camera.allow}
                   onPress={() => {
                     void requestPermission();
                   }}
@@ -137,7 +139,7 @@ export default function ScanScreen() {
                 loading={importing === "files"}
                 disabled={importing !== null}
               />
-              <PrimaryButton title="Înapoi" variant="outline" onPress={() => router.back()} />
+              <PrimaryButton title={t.common.back} variant="outline" onPress={() => router.back()} />
             </View>
           </Card>
         </View>
@@ -180,7 +182,7 @@ export default function ScanScreen() {
         setPhotoUri(croppedUri);
       }
     } catch {
-      Alert.alert("Nu am putut realiza fotografia", "Încearcă din nou.");
+      Alert.alert(t.camera.pictureFailedTitle, t.common.tryAgain);
     } finally {
       setIsTakingPicture(false);
     }
@@ -214,7 +216,7 @@ export default function ScanScreen() {
         <View style={styles.topBar}>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Închide camera"
+            accessibilityLabel={t.camera.close}
             onPress={() => router.back()}
             style={({ pressed }) => [styles.closeButton, pressed && styles.pressed]}
           >
@@ -232,7 +234,7 @@ export default function ScanScreen() {
               source={{ uri: photoUri }}
               style={styles.previewImage}
               resizeMode="cover"
-              accessibilityLabel="Poza documentului"
+              accessibilityLabel={t.review.photo}
               testID="captured-photo"
             />
           </View>
@@ -242,14 +244,14 @@ export default function ScanScreen() {
           <Text style={styles.previewHint}>
             {isUploading
               ? SCAN_MESSAGES.stages.UPLOADING
-              : "Verifică dacă textul, data și totalul de pe bon sunt lizibile."}
+              : t.camera.previewHint}
           </Text>
           <View style={styles.previewActions}>
             <View style={styles.actionItem}>
-              <PrimaryButton title="Refă poza" variant="outline" onPress={handleRetake} disabled={isUploading} />
+              <PrimaryButton title={t.camera.retake} variant="outline" onPress={handleRetake} disabled={isUploading} />
             </View>
             <View style={styles.actionItem}>
-              <PrimaryButton title="Continuă" onPress={handleContinue} loading={isUploading} />
+              <PrimaryButton title={t.common.continue} onPress={handleContinue} loading={isUploading} />
             </View>
           </View>
         </SafeAreaView>
@@ -280,7 +282,7 @@ export default function ScanScreen() {
         <View style={styles.topBar}>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Închide camera"
+            accessibilityLabel={t.camera.close}
             onPress={() => router.back()}
             style={({ pressed }) => [styles.closeButton, pressed && styles.pressed]}
           >
@@ -296,7 +298,7 @@ export default function ScanScreen() {
           <View
             style={styles.documentFrame}
             onLayout={handleFrameLayout}
-            accessibilityLabel="Chenarul documentului"
+            accessibilityLabel={t.camera.frame}
             testID="document-frame"
           >
             <View style={[styles.corner, styles.cornerTopLeft]} />
@@ -305,7 +307,7 @@ export default function ScanScreen() {
             <View style={[styles.corner, styles.cornerBottomRight]} />
           </View>
           <View style={styles.guidanceBadge}>
-            <Text style={styles.guidanceText}>Încadrează bonul în chenar</Text>
+            <Text style={styles.guidanceText}>{t.camera.guidance}</Text>
           </View>
         </View>
 
@@ -321,7 +323,7 @@ export default function ScanScreen() {
           </View>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Declanșator"
+            accessibilityLabel={t.camera.shutter}
             accessibilityState={{ disabled: isTakingPicture || importing !== null }}
             disabled={isTakingPicture || importing !== null}
             onPress={() => {

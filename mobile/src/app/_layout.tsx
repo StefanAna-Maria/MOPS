@@ -13,6 +13,7 @@ import { authClient } from "@/lib/auth-client";
 import { ProfileProvider, useProfile } from "@/lib/profile-context";
 import { hasSignedOutThisSession } from "@/lib/sign-out";
 import { colors, spacing, typography } from "@/constants/theme";
+import { loadLanguageSetting, useT } from "@/i18n";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -27,14 +28,21 @@ export default function RootLayout() {
   });
 
   const fontsReady = fontsLoaded || !!fontError;
+  // CA-17.2: the language chosen in Setări is read before the first screen, so it never flashes in another language.
+  const [languageReady, setLanguageReady] = useState(false);
+  const ready = fontsReady && languageReady;
 
   useEffect(() => {
-    if (fontsReady) {
+    loadLanguageSetting().finally(() => setLanguageReady(true));
+  }, []);
+
+  useEffect(() => {
+    if (ready) {
       SplashScreen.hide();
     }
-  }, [fontsReady]);
+  }, [ready]);
 
-  if (!fontsReady) {
+  if (!ready) {
     return null;
   }
 
@@ -47,6 +55,7 @@ export default function RootLayout() {
 }
 
 function RootNavigator() {
+  const t = useT();
   const { data: session, isPending } = authClient.useSession();
   const { profile, company, isLoading, hasError, reload } = useProfile();
 
@@ -77,9 +86,9 @@ function RootNavigator() {
   if (isSignedIn && hasError) {
     return (
       <View style={styles.error}>
-        <Text style={styles.errorTitle}>Serverul nu răspunde</Text>
-        <Text style={styles.errorText}>Verifică conexiunea la internet și încearcă din nou.</Text>
-        <PrimaryButton title="Încearcă din nou" onPress={reload} loading={isLoading} />
+        <Text style={styles.errorTitle}>{t.common.serverUnavailableTitle}</Text>
+        <Text style={styles.errorText}>{t.common.serverUnavailable}</Text>
+        <PrimaryButton title={t.common.retry} onPress={reload} loading={isLoading} />
       </View>
     );
   }

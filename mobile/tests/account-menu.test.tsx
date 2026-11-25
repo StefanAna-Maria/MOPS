@@ -1,15 +1,14 @@
 import { fireEvent, render, screen } from "@testing-library/react-native";
 import { router } from "expo-router";
-import { AccountMenu } from "@/components/account-menu";
-import { signOut } from "@/lib/sign-out";
+import { AccountMenu, initialsOf } from "@/components/account-menu";
 
-jest.mock("@/lib/auth-client", () => ({
-  authClient: { useSession: () => ({ data: { user: { email: "ana@example.com" } } }) },
-}));
 jest.mock("@/lib/profile-context", () => ({
   useProfile: () => ({ profile: { firstName: "Ana", lastName: "Popescu" } }),
 }));
-jest.mock("@/lib/sign-out", () => ({ signOut: jest.fn().mockResolvedValue(undefined) }));
+
+beforeEach(() => {
+  jest.clearAllMocks();
+});
 
 describe("AccountMenu", () => {
   it("shows the initials of the user", async () => {
@@ -18,40 +17,16 @@ describe("AccountMenu", () => {
     expect(screen.getByText("AP")).toBeOnTheScreen();
   });
 
-  it("shows the name and the email in the menu", async () => {
+  it("opens Contul meu directly, without a menu in between", async () => {
     await render(<AccountMenu />);
 
     await fireEvent.press(screen.getByRole("button", { name: "Contul meu" }));
 
-    expect(screen.getByText("Ana Popescu")).toBeOnTheScreen();
-    expect(screen.getByText("ana@example.com")).toBeOnTheScreen();
+    expect(router.push).toHaveBeenCalledWith("/settings");
   });
 
-  it("CA-02.15: shows Schimbă parola above Deconectează-te", async () => {
-    await render(<AccountMenu />);
-
-    await fireEvent.press(screen.getByRole("button", { name: "Contul meu" }));
-
-    const texts = screen.getAllByText(/Schimbă parola|Deconectează-te/).map((node) => node.props.children);
-    expect(texts).toEqual(["Schimbă parola", "Deconectează-te"]);
-  });
-
-  it("CA-02.15: Schimbă parola closes the menu and opens the form", async () => {
-    await render(<AccountMenu />);
-
-    await fireEvent.press(screen.getByRole("button", { name: "Contul meu" }));
-    await fireEvent.press(screen.getByRole("button", { name: "Schimbă parola" }));
-
-    expect(router.push).toHaveBeenCalledWith("/change-password");
-    expect(signOut).not.toHaveBeenCalled();
-  });
-
-  it("CA-01.14: Deconectează-te signs the user out", async () => {
-    await render(<AccountMenu />);
-
-    await fireEvent.press(screen.getByRole("button", { name: "Contul meu" }));
-    await fireEvent.press(screen.getByRole("button", { name: "Deconectează-te" }));
-
-    expect(signOut).toHaveBeenCalledTimes(1);
+  it("builds the initials from the first and last name", () => {
+    expect(initialsOf("ana", "popescu")).toBe("AP");
+    expect(initialsOf("Ana", null)).toBe("A");
   });
 });

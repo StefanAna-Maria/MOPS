@@ -6,18 +6,20 @@ import { Screen } from "@/components/screen";
 import { Card } from "@/components/card";
 import { ExpenseFormFields } from "@/components/expense-form-fields";
 import { PrimaryButton } from "@/components/primary-button";
-import { TextLink } from "@/components/text-link";
+import { BackLink } from "@/components/back-link";
 import { apiFetch } from "@/lib/api";
 import { showServerUnavailable } from "@/lib/alerts";
 import { localTodayIso } from "@/lib/dates";
 import { useProfile } from "@/lib/profile-context";
 import { createRequestId } from "@/lib/request-id";
 import { EMPTY_EXPENSE_VALUES, useExpenseForm } from "@/lib/use-expense-form";
+import { useT } from "@/i18n";
 
 export default function AddExpenseScreen() {
+  const t = useT();
   const { activeContext, company } = useProfile();
   // The expense goes to the profile selected on Acasă (personal or company), and is shown only there.
-  const profileName = activeContext === "company" && company ? company.name : "Personal";
+  const profileName = activeContext === "company" && company ? company.name : t.profile.personal;
   const form = useExpenseForm({ ...EMPTY_EXPENSE_VALUES, date: formatDisplayDate(localTodayIso()) });
   const [loading, setLoading] = useState(false);
 
@@ -50,7 +52,7 @@ export default function AddExpenseScreen() {
         if (data?.code === "INVALID_EXPENSE" && Array.isArray(data.fields)) {
           form.touchAll();
         }
-        Alert.alert("Nu am putut salva cheltuiala", "Verifică datele și încearcă din nou.");
+        Alert.alert(t.expense.saveFailedTitle, t.common.checkDataAndRetry);
         return;
       }
       router.back();
@@ -63,12 +65,16 @@ export default function AddExpenseScreen() {
   }
 
   return (
-    <Screen title="Adaugă o cheltuială" subtitle={`Pentru plățile fără bon. Se salvează în: ${profileName}.`}>
+    <Screen title={t.expense.title} subtitle={t.expense.subtitle(profileName)}>
       <Card>
-        <ExpenseFormFields form={form} descriptionLabel="Pentru ce ai plătit?" placeholder="ex. Piața Obor" />
-        <PrimaryButton title="Adaugă cheltuiala" onPress={handleSubmit} disabled={!form.canSubmit} loading={loading} />
+        <ExpenseFormFields
+          form={form}
+          descriptionLabel={t.expense.descriptionLabel}
+          placeholder={t.expense.descriptionPlaceholder}
+        />
+        <PrimaryButton title={t.expense.submit} onPress={handleSubmit} disabled={!form.canSubmit} loading={loading} />
       </Card>
-      <TextLink href="/">Renunță</TextLink>
+      <BackLink>{t.common.cancel}</BackLink>
     </Screen>
   );
 }

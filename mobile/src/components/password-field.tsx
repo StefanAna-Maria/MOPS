@@ -3,12 +3,14 @@ import { Pressable, StyleSheet, type TextInputProps } from "react-native";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { TextField } from "@/components/text-field";
 import { colors, spacing } from "@/constants/theme";
+import { useT } from "@/i18n";
 
 type PasswordFieldProps = Omit<TextInputProps, "secureTextEntry"> & {
   label: string;
 };
 
 export function PasswordField(props: PasswordFieldProps) {
+  const t = useT();
   const [visible, setVisible] = useState(false);
 
   return (
@@ -20,7 +22,7 @@ export function PasswordField(props: PasswordFieldProps) {
       accessory={
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={visible ? "Ascunde parola" : "Arată parola"}
+          accessibilityLabel={visible ? t.password.hide : t.password.show}
           hitSlop={8}
           onPress={() => setVisible((value) => !value)}
           style={({ pressed }) => [styles.toggle, pressed && styles.pressed]}

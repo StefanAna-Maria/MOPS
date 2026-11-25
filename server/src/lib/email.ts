@@ -45,20 +45,49 @@ export async function sendEmail(email: Email) {
   }
 }
 
-export function passwordResetEmail(to: string, otp: string): Email {
+/** US-17: the language of the emails with a code, from the app's Accept-Language header (Romanian by default). */
+export type EmailLanguage = "ro" | "en";
+
+export function emailLanguage(acceptLanguage: string | null | undefined): EmailLanguage {
+  return acceptLanguage?.trim().toLowerCase().startsWith("en") ? "en" : "ro";
+}
+
+const code = (otp: string) => `<p style="font-size:28px;letter-spacing:6px"><b>${otp}</b></p>`;
+
+export function passwordResetEmail(to: string, otp: string, language: EmailLanguage = "ro"): Email {
+  if (language === "en") {
+    return {
+      to,
+      subject: "Reset your password",
+      text: `Your password reset code is ${otp}. It expires in 5 minutes.
+If you did not ask for a reset, ignore this message.`,
+      html: `<p>Your password reset code is:</p>${code(otp)}<p>It expires in 5 minutes. If you did not ask for a reset, ignore this message.</p>`,
+    };
+  }
   return {
     to,
     subject: "Resetează-ți parola",
-    text: `Codul tău pentru resetarea parolei este ${otp}. Expiră în 5 minute.\nDacă nu ai cerut tu resetarea, ignoră acest mesaj.`,
-    html: `<p>Codul tău pentru resetarea parolei este:</p><p style="font-size:28px;letter-spacing:6px"><b>${otp}</b></p><p>Expiră în 5 minute. Dacă nu ai cerut tu resetarea, ignoră acest mesaj.</p>`,
+    text: `Codul tău pentru resetarea parolei este ${otp}. Expiră în 5 minute.
+Dacă nu ai cerut tu resetarea, ignoră acest mesaj.`,
+    html: `<p>Codul tău pentru resetarea parolei este:</p>${code(otp)}<p>Expiră în 5 minute. Dacă nu ai cerut tu resetarea, ignoră acest mesaj.</p>`,
   };
 }
 
-export function verificationEmail(to: string, otp: string): Email {
+export function verificationEmail(to: string, otp: string, language: EmailLanguage = "ro"): Email {
+  if (language === "en") {
+    return {
+      to,
+      subject: "Confirm your email address",
+      text: `Your confirmation code is ${otp}. It expires in 5 minutes.
+If you did not create an account, ignore this message.`,
+      html: `<p>Your confirmation code is:</p>${code(otp)}<p>It expires in 5 minutes. If you did not create an account, ignore this message.</p>`,
+    };
+  }
   return {
     to,
     subject: "Confirmă-ți adresa de email",
-    text: `Codul tău de confirmare este ${otp}. Expiră în 5 minute.\nDacă nu ai creat tu un cont, ignoră acest mesaj.`,
-    html: `<p>Codul tău de confirmare este:</p><p style="font-size:28px;letter-spacing:6px"><b>${otp}</b></p><p>Expiră în 5 minute. Dacă nu ai creat tu un cont, ignoră acest mesaj.</p>`,
+    text: `Codul tău de confirmare este ${otp}. Expiră în 5 minute.
+Dacă nu ai creat tu un cont, ignoră acest mesaj.`,
+    html: `<p>Codul tău de confirmare este:</p>${code(otp)}<p>Expiră în 5 minute. Dacă nu ai creat tu un cont, ignoră acest mesaj.</p>`,
   };
 }
