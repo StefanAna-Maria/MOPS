@@ -1,6 +1,7 @@
 import { Pressable, ScrollView, StyleSheet, Text } from "react-native";
-import { DOCUMENT_FILTERS, DOCUMENT_FILTER_LABELS, type DocumentFilter } from "@ocrinvoice/shared";
+import { DOCUMENT_FILTERS, type DocumentFilter } from "@ocrinvoice/shared";
 import { colors, radius, spacing, typography } from "@/constants/theme";
+import { useT } from "@/i18n";
 
 type DocumentFiltersProps = {
   value: DocumentFilter;
@@ -8,6 +9,7 @@ type DocumentFiltersProps = {
 };
 
 export function DocumentFilters({ value, onChange }: DocumentFiltersProps) {
+  const t = useT();
   return (
     <ScrollView
       horizontal
@@ -22,11 +24,11 @@ export function DocumentFilters({ value, onChange }: DocumentFiltersProps) {
             key={filter}
             accessibilityRole="tab"
             accessibilityState={{ selected }}
-            accessibilityLabel={DOCUMENT_FILTER_LABELS[filter]}
+            accessibilityLabel={t.filters[filter]}
             onPress={() => onChange(filter)}
             style={({ pressed }) => [styles.chip, selected && styles.chipSelected, pressed && styles.pressed]}
           >
-            <Text style={[styles.text, selected && styles.textSelected]}>{DOCUMENT_FILTER_LABELS[filter]}</Text>
+            <Text style={[styles.text, selected && styles.textSelected]}>{t.filters[filter]}</Text>
           </Pressable>
         );
       })}

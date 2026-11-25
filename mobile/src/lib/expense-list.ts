@@ -6,6 +6,7 @@ import {
   type DocumentType,
   type ExpenseDocument,
 } from "@ocrinvoice/shared";
+import { formatMoney, getLanguage, t } from "@/i18n";
 
 export { amountToCents };
 
@@ -32,15 +33,18 @@ export type DaySection = {
   data: ExpenseDocument[];
 };
 
-/** 123450 → "1.234,50 lei", -320 → "-3,20 lei" (Romanian format: dot for thousands, comma for decimals). */
+/** "12.50" → 1250. Amounts come from the server with exactly two decimals. */
+export function amountToCents(amount: string): number {
+  // Discounts read from receipts are negative ("-3.20"): the sign applies to the decimals too.
+  const negative = amount.trim().startsWith("-");
+  const [units, decimals = ""] = amount.trim().replace(/^-/, "").split(".");
+  const cents = Number(units) * 100 + Number(decimals.padEnd(2, "0").slice(0, 2));
+  return negative ? -cents : cents;
+}
+
+/** CA-17.3: 123450 → "1.234,50 lei" in Romanian, "1,234.50 RON" in English (see formatMoney). */
 export function formatLei(cents: number): string {
-  const sign = cents < 0 ? "-" : "";
-  const abs = Math.abs(cents);
-  const units = Math.floor(abs / 100)
-    .toString()
-    .replace(/\B(?=(\d{3})+(?!\d))/g, ".");
-  const decimals = String(abs % 100).padStart(2, "0");
-  return `${sign}${units},${decimals} lei`;
+  return formatMoney(cents);
 }
 
 function shiftDays(isoDate: string, days: number) {
@@ -49,25 +53,35 @@ function shiftDays(isoDate: string, days: number) {
   return date.toISOString().slice(0, 10);
 }
 
-/** CA-04.1: "ASTĂZI", "IERI" or "JOI, 23 OCTOMBRIE". */
+/** CA-04.1: "ASTĂZI", "IERI" or "JOI, 23 OCTOMBRIE" (in English "TODAY", "YESTERDAY", "THURSDAY, OCTOBER 23"). */
 export function dayLabel(isoDate: string, today: string): string {
+  const { dates } = t();
   if (isoDate === today) {
-    return "ASTĂZI";
+    return dates.today;
   }
   if (isoDate === shiftDays(today, -1)) {
-    return "IERI";
+    return dates.yesterday;
   }
   const date = new Date(`${isoDate}T00:00:00Z`);
-  return `${WEEKDAYS[date.getUTCDay()]}, ${date.getUTCDate()} ${MONTHS[date.getUTCMonth()]}`;
+  const weekday = dates.weekdays[date.getUTCDay()];
+  const month = dates.months[date.getUTCMonth()];
+  return getLanguage() === "en"
+    ? `${weekday}, ${month} ${date.getUTCDate()}`
+    : `${weekday}, ${date.getUTCDate()} ${month}`;
+}
+
+/** A category's name: a built-in one in the current language, the user's own one as they named it (US-03). */
+export function categoryLabel(code: string, customName?: string | null): string {
+  if (isExpenseCategory(code)) {
+    return t().categories[code];
+  }
+  return customName ?? t().categories.OTHER;
 }
 
 /** CA-04.3: "Alimente · Cheltuială manuală". */
 export function documentSubtitle(document: ExpenseDocument): string {
-  // US-03: the server names the category (a built-in label or the user's own category).
-  const category =
-    document.categoryName ??
-    (isExpenseCategory(document.category) ? EXPENSE_CATEGORY_LABELS[document.category] : "Altele");
-  const type = DOCUMENT_TYPE_LABELS[document.type as DocumentType] ?? document.type;
+  const category = categoryLabel(document.category, document.categoryName);
+  const type = t().documentTypes[document.type] ?? document.type;
   return `${category} · ${type}`;
 }
 

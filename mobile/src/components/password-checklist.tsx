@@ -1,8 +1,10 @@
 import { StyleSheet, Text, View } from "react-native";
 import { passwordRules } from "@ocrinvoice/shared";
 import { colors, radius, spacing, typography } from "@/constants/theme";
+import { useT } from "@/i18n";
 
 export function PasswordChecklist({ password }: { password: string }) {
+  const t = useT();
   return (
     <View style={styles.container}>
       {passwordRules.map((rule) => {
@@ -12,7 +14,9 @@ export function PasswordChecklist({ password }: { password: string }) {
             <View style={[styles.indicator, passed && styles.indicatorPassed]}>
               {passed ? <Text style={styles.check}>✓</Text> : null}
             </View>
-            <Text style={[styles.rule, passed && styles.rulePassed]}>{rule.label}</Text>
+            <Text style={[styles.rule, passed && styles.rulePassed]}>
+              {t.password.rules[rule.id as keyof typeof t.password.rules] ?? rule.label}
+            </Text>
           </View>
         );
       })}

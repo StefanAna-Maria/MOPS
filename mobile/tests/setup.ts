@@ -4,7 +4,7 @@ jest.mock("expo-router", () => {
   const React = require("react");
   const { Text } = require("react-native");
   return {
-    router: { push: jest.fn(), back: jest.fn(), replace: jest.fn() },
+    router: { push: jest.fn(), back: jest.fn(), replace: jest.fn(), canGoBack: jest.fn(() => true) },
     useFocusEffect: (effect: () => void) => React.useEffect(() => effect(), [effect]),
     useIsFocused: jest.fn(() => true),
     useLocalSearchParams: jest.fn(() => ({})),
@@ -20,3 +20,6 @@ jest.mock("@react-native-community/datetimepicker", () => {
     React.createElement(View, { testID: "date-time-picker", ...props });
   return { __esModule: true, default: DateTimePicker, DateTimePickerAndroid: { open: jest.fn() } };
 });
+
+// US-17: the tests run with a phone set to Romanian, the app's main language.
+jest.mock("expo-localization", () => ({ getLocales: () => [{ languageCode: "ro", languageTag: "ro-RO" }] }));

@@ -9,8 +9,10 @@ import { PrimaryButton } from "@/components/primary-button";
 import { authClient } from "@/lib/auth-client";
 import { isValidEmail } from "@/lib/validation";
 import { showServerUnavailable, showTooManyAttempts } from "@/lib/alerts";
+import { useT } from "@/i18n";
 
 export default function ForgotPasswordScreen() {
+  const t = useT();
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -23,7 +25,7 @@ export default function ForgotPasswordScreen() {
         if (error.status === 429) {
           showTooManyAttempts();
         } else {
-          Alert.alert("Nu am putut trimite codul", "Încearcă din nou.");
+          Alert.alert(t.code.sendFailedTitle, t.common.tryAgain);
         }
         return;
       }
@@ -37,21 +39,21 @@ export default function ForgotPasswordScreen() {
   }
 
   return (
-    <Screen title="Ai uitat parola?" subtitle="Scrie emailul contului și îți trimitem un cod de 6 cifre.">
+    <Screen title={t.forgotPassword.title} subtitle={t.forgotPassword.subtitle}>
       <Card>
         <TextField
-          label="Email"
+          label={t.common.email}
           value={email}
           onChangeText={setEmail}
-          placeholder="nume@exemplu.com"
+          placeholder={t.common.emailPlaceholder}
           autoCapitalize="none"
           autoComplete="email"
           keyboardType="email-address"
           textContentType="emailAddress"
         />
-        <PrimaryButton title="Trimite codul" onPress={handleSend} disabled={!isValidEmail(email)} loading={loading} />
+        <PrimaryButton title={t.forgotPassword.send} onPress={handleSend} disabled={!isValidEmail(email)} loading={loading} />
       </Card>
-      <TextLink href="/sign-in">Înapoi la „Intră în cont”</TextLink>
+      <TextLink href="/sign-in">{t.signIn.backToSignIn}</TextLink>
     </Screen>
   );
 }

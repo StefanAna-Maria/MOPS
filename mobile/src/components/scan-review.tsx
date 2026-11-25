@@ -1,14 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
-import {
-  DOCUMENT_KIND_LABELS,
-  PAYMENT_METHODS,
-  PAYMENT_METHOD_LABELS,
-  parseLineAmount,
-  type CategoryOption,
-  type OcrReading,
-} from "@ocrinvoice/shared";
+import { PAYMENT_METHODS, parseLineAmount, type CategoryOption, type OcrReading } from "@ocrinvoice/shared";
 import { Card } from "@/components/card";
 import { CategoryField } from "@/components/category-field";
 import { DateTimeField, formatPickedDate } from "@/components/date-time-field";
@@ -38,6 +31,7 @@ import {
   type ReviewItem,
 } from "@/lib/scan-review";
 import { colors, radius, spacing, typography } from "@/constants/theme";
+import { useT } from "@/i18n";
 
 type ScanReviewProps = {
   scanId: string;
@@ -111,6 +105,7 @@ function blockerMessage(blocker: SaveBlocker) {
 }
 
 export function ScanReview({ scanId, reading }: ScanReviewProps) {
+  const t = useT();
   const [review, setReview] = useState<Review>(() => createReview(reading));
   const [loading, setLoading] = useState(false);
   const saving = useRef(false);
@@ -202,13 +197,13 @@ export function ScanReview({ scanId, reading }: ScanReviewProps) {
   return (
     <>
       <Text style={styles.documentKind} accessibilityRole="header">
-        {REVIEW_MESSAGES.documentKind(DOCUMENT_KIND_LABELS[review.documentKind])}
+        {REVIEW_MESSAGES.documentKind(t.documentKinds[review.documentKind])}
       </Text>
       <Card>
-        {textField("merchant", review.documentKind === "INVOICE" ? "Furnizor" : "Magazin")}
+        {textField("merchant", review.documentKind === "INVOICE" ? t.review.supplier : t.review.merchant)}
         <View style={styles.field}>
           <DateTimeField
-            label="Data"
+            label={t.review.date}
             mode="date"
             value={review.date.value}
             onChange={editText("date")}
@@ -216,12 +211,12 @@ export function ScanReview({ scanId, reading }: ScanReviewProps) {
             placeholder="ZZ.LL.AAAA"
             error={dateError}
           />
-          <FieldStatusBadge label="Data" field={review.date} onConfirm={confirm("date")} />
+          <FieldStatusBadge label={t.review.date} field={review.date} onConfirm={confirm("date")} />
         </View>
         {review.documentKind === "INVOICE" ? null : (
         <View style={styles.field}>
           <DateTimeField
-            label="Ora"
+            label={t.review.time}
             mode="time"
             value={review.time.value}
             onChange={editText("time")}
@@ -229,20 +224,20 @@ export function ScanReview({ scanId, reading }: ScanReviewProps) {
             placeholder="HH:MM"
             error={timeError}
           />
-          <FieldStatusBadge label="Ora" field={review.time} onConfirm={confirm("time")} />
+          <FieldStatusBadge label={t.review.time} field={review.time} onConfirm={confirm("time")} />
         </View>
         )}
-        {textField("total", "Total", {
+        {textField("total", t.review.total, {
           placeholder: "0,00",
           keyboardType: "decimal-pad",
-          accessory: <Text style={styles.currency}>lei</Text>,
+          accessory: <Text style={styles.currency}>{t.common.currency}</Text>,
         })}
         <View style={styles.field}>
           <SegmentedField
-            label="Plată"
+            label={t.review.payment}
             value={review.paymentMethod.value}
             options={PAYMENT_METHODS}
-            labels={PAYMENT_METHOD_LABELS}
+            labels={t.payments}
             onChange={(value) =>
               setReview((previous) => ({
                 ...previous,
@@ -250,16 +245,16 @@ export function ScanReview({ scanId, reading }: ScanReviewProps) {
               }))
             }
           />
-          <FieldStatusBadge label="Plată" field={review.paymentMethod} onConfirm={confirm("paymentMethod")} />
+          <FieldStatusBadge label={t.review.payment} field={review.paymentMethod} onConfirm={confirm("paymentMethod")} />
         </View>
       </Card>
 
       <Text style={styles.sectionTitle}>{REVIEW_MESSAGES.products}</Text>
       {review.items.map((item, index) => {
         const number = index + 1;
-        const nameLabel = `Produsul ${number}`;
-        const amountLabel = `Suma produsului ${number}`;
-        const categoryLabel = `Categoria produsului ${number}`;
+        const nameLabel = t.review.product(number);
+        const amountLabel = t.review.productAmount(number);
+        const categoryLabel = t.review.productCategory(number);
         return (
           <Card key={item.key}>
             <View style={styles.field}>
@@ -296,7 +291,7 @@ export function ScanReview({ scanId, reading }: ScanReviewProps) {
                 }
                 placeholder="0,00"
                 keyboardType="numbers-and-punctuation"
-                accessory={<Text style={styles.currency}>lei</Text>}
+                accessory={<Text style={styles.currency}>{t.common.currency}</Text>}
                 error={
                   item.amount.value.trim() && parseLineAmount(item.amount.value) === null
                     ? REVIEW_MESSAGES.invalidAmount
@@ -351,7 +346,7 @@ export function ScanReview({ scanId, reading }: ScanReviewProps) {
             </View>
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={`Șterge produsul ${number}`}
+              accessibilityLabel={t.review.deleteProductLabel(number)}
               onPress={() =>
                 setReview((previous) => ({
                   ...previous,

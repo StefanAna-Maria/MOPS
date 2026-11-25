@@ -10,8 +10,10 @@ import { PrimaryButton } from "@/components/primary-button";
 import { authClient } from "@/lib/auth-client";
 import { isValidEmail } from "@/lib/validation";
 import { showServerUnavailable, showTooManyAttempts } from "@/lib/alerts";
+import { useT } from "@/i18n";
 
 export default function SignInScreen() {
+  const t = useT();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -34,9 +36,9 @@ export default function SignInScreen() {
       } else if (error.code === "EMAIL_NOT_VERIFIED") {
         router.push({ pathname: "/verify-email", params: { email: normalizedEmail } });
       } else if (error.status === 401) {
-        Alert.alert("Nu am putut intra", "Emailul sau parola nu se potrivesc. Verifică-le și încearcă din nou.");
+        Alert.alert(t.signIn.failedTitle, t.signIn.wrongCredentials);
       } else {
-        Alert.alert("Nu am putut intra", "Încearcă din nou.");
+        Alert.alert(t.signIn.failedTitle, t.common.tryAgain);
       }
     } catch {
       showServerUnavailable();
@@ -46,31 +48,31 @@ export default function SignInScreen() {
   }
 
   return (
-    <Screen title="Intră în cont" subtitle="Bine ai revenit! Introdu datele contului tău.">
+    <Screen title={t.signIn.title} subtitle={t.signIn.subtitle}>
       <Card>
         <TextField
-          label="Email"
+          label={t.common.email}
           value={email}
           onChangeText={setEmail}
-          placeholder="nume@exemplu.com"
+          placeholder={t.common.emailPlaceholder}
           autoCapitalize="none"
           autoComplete="email"
           keyboardType="email-address"
           textContentType="emailAddress"
         />
         <PasswordField
-          label="Parolă"
+          label={t.common.password}
           value={password}
           onChangeText={setPassword}
           autoComplete="current-password"
           textContentType="password"
         />
         <TextLink href="/forgot-password" align="right">
-          Ai uitat parola?
+          {t.signIn.forgotPassword}
         </TextLink>
-        <PrimaryButton title="Intră în cont" onPress={handleSignIn} disabled={!canSubmit} loading={loading} />
+        <PrimaryButton title={t.signIn.submit} onPress={handleSignIn} disabled={!canSubmit} loading={loading} />
       </Card>
-      <TextLink href="/sign-up">Nu ai cont? Creează unul</TextLink>
+      <TextLink href="/sign-up">{t.signIn.noAccount}</TextLink>
     </Screen>
   );
 }

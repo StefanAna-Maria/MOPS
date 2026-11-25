@@ -3,19 +3,13 @@ import { ActivityIndicator, Platform, ScrollView, StyleSheet, Text, View } from 
 import { router, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Ionicons from "@expo/vector-icons/Ionicons";
-import {
-  SCAN_STAGES,
-  SCAN_STAGE_LABELS,
-  type OcrReading,
-  type Scan,
-  type ScanErrorCode,
-  type ScanStage,
-} from "@ocrinvoice/shared";
+import { SCAN_STAGES, type OcrReading, type Scan, type ScanErrorCode, type ScanStage } from "@ocrinvoice/shared";
 import { PrimaryButton } from "@/components/primary-button";
 import { ScanReview } from "@/components/scan-review";
 import { SCAN_MESSAGES } from "@/lib/expense-messages";
 import { POLL_INTERVAL_MS, ScanUploadError, fetchScan, retryScan } from "@/lib/scan-upload";
 import { colors, elevation, radius, spacing, typography } from "@/constants/theme";
+import { useT } from "@/i18n";
 
 type ScreenState =
   | { status: "processing"; stage: ScanStage; elapsedSeconds: number }
@@ -49,6 +43,7 @@ export function resolveActiveStage(
 }
 
 function ReadingStages({ activeStage, elapsedSeconds }: { activeStage: ScanStage; elapsedSeconds: number }) {
+  const t = useT();
   const activeIndex = SCAN_STAGES.indexOf(activeStage);
 
   return (
@@ -59,7 +54,7 @@ function ReadingStages({ activeStage, elapsedSeconds }: { activeStage: ScanStage
             <Ionicons name="scan-outline" size={24} color={colors.primary} />
           </View>
           <View style={styles.stagesHeaderTexts}>
-            <Text style={styles.stagesHeaderTitle}>Analiză inteligentă OCR</Text>
+            <Text style={styles.stagesHeaderTitle}>{t.scan.analysisTitle}</Text>
             <Text style={styles.stagesHeaderSubtitle}>
               {SCAN_MESSAGES.readingHint}
             </Text>
@@ -98,7 +93,7 @@ function ReadingStages({ activeStage, elapsedSeconds }: { activeStage: ScanStage
                 {isDone ? (
                   <Ionicons name="checkmark" size={14} color={colors.white} />
                 ) : isActive ? (
-                  <ActivityIndicator size="small" color={colors.primary} accessibilityLabel="Se citește" />
+                  <ActivityIndicator size="small" color={colors.primary} accessibilityLabel={t.scan.reading} />
                 ) : (
                   <View style={styles.stageDotPending} />
                 )}
@@ -110,7 +105,7 @@ function ReadingStages({ activeStage, elapsedSeconds }: { activeStage: ScanStage
                   isActive && styles.stageTextActive,
                 ]}
               >
-                {SCAN_STAGE_LABELS[stage]}
+                {t.scan.stages[stage]}
               </Text>
             </View>
           );
@@ -126,6 +121,8 @@ function ReadingStages({ activeStage, elapsedSeconds }: { activeStage: ScanStage
  * save the document.
  */
 export default function ScanResultScreen() {
+  // Re-render in the new language when it changes (CA-17.2): the screen's texts come from SCAN_MESSAGES.
+  useT();
   const { id } = useLocalSearchParams<{ id: string }>();
   const scanId = id ? String(id) : "";
   const [state, setState] = useState<ScreenState>({

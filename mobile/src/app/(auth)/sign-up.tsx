@@ -13,13 +13,15 @@ import { isStrongPassword, type UsageType } from "@ocrinvoice/shared";
 import { isValidEmail } from "@/lib/validation";
 import { showServerUnavailable, showTooManyAttempts } from "@/lib/alerts";
 import { colors, radius, spacing, typography } from "@/constants/theme";
+import { useT } from "@/i18n";
 
-const usageOptions: { value: UsageType; label: string }[] = [
-  { value: "PERSONAL", label: "Personal" },
-  { value: "COMPANY", label: "Firmă" },
-];
 
 export default function SignUpScreen() {
+  const t = useT();
+  const usageOptions: { value: UsageType; label: string }[] = [
+    { value: "PERSONAL", label: t.signUp.usagePersonal },
+    { value: "COMPANY", label: t.signUp.usageCompany },
+  ];
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [usageType, setUsageType] = useState<UsageType>("PERSONAL");
@@ -41,9 +43,9 @@ export default function SignUpScreen() {
         if (error.status === 429) {
           showTooManyAttempts();
         } else if (error.code === "PASSWORD_TOO_WEAK") {
-          Alert.alert("Parolă prea slabă", "Parola trebuie să respecte toate cele trei reguli.");
+          Alert.alert(t.password.tooWeakTitle, t.password.tooWeak);
         } else {
-          Alert.alert("Nu am putut crea contul", "Încearcă din nou.");
+          Alert.alert(t.signUp.failedTitle, t.common.tryAgain);
         }
         return;
       }
@@ -56,20 +58,20 @@ export default function SignUpScreen() {
   }
 
   return (
-    <Screen title="Creează cont" subtitle="Ai nevoie doar de un email și o parolă.">
+    <Screen title={t.signUp.title} subtitle={t.signUp.subtitle}>
       <Card>
         <TextField
-          label="Email"
+          label={t.common.email}
           value={email}
           onChangeText={setEmail}
-          placeholder="nume@exemplu.com"
+          placeholder={t.common.emailPlaceholder}
           autoCapitalize="none"
           autoComplete="email"
           keyboardType="email-address"
           textContentType="emailAddress"
         />
         <PasswordField
-          label="Parolă"
+          label={t.common.password}
           value={password}
           onChangeText={setPassword}
           autoComplete="new-password"
@@ -77,7 +79,7 @@ export default function SignUpScreen() {
         />
         <PasswordChecklist password={password} />
         <View style={styles.usage}>
-          <Text style={styles.usageLabel}>Vei folosi aplicația</Text>
+          <Text style={styles.usageLabel}>{t.signUp.usageLabel}</Text>
           <View style={styles.usageOptions}>
             {usageOptions.map((option) => {
               const selected = usageType === option.value;
@@ -95,9 +97,9 @@ export default function SignUpScreen() {
             })}
           </View>
         </View>
-        <PrimaryButton title="Creează cont" onPress={handleSignUp} disabled={!canSubmit} loading={loading} />
+        <PrimaryButton title={t.signUp.submit} onPress={handleSignUp} disabled={!canSubmit} loading={loading} />
       </Card>
-      <TextLink href="/sign-in">Ai deja cont? Intră în cont</TextLink>
+      <TextLink href="/sign-in">{t.signUp.haveAccount}</TextLink>
     </Screen>
   );
 }

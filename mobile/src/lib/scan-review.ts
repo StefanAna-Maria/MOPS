@@ -1,3 +1,4 @@
+import { t } from "@/i18n";
 import {
   LOW_CONFIDENCE,
   checkTotal,
@@ -175,15 +176,18 @@ export function isFutureTime(review: Review, today: string, currentTime: string)
   return parseDisplayDate(review.date.value) === today && /^\d{2}:\d{2}$/.test(time) && time > currentTime;
 }
 
-const FIELD_LABELS: Record<string, string> = {
-  merchant: "Magazin",
-  date: "Data",
-  time: "Ora",
-  total: "Total",
-  paymentMethod: "Plată",
-  category: "Categorie",
-  items: "Produse",
-};
+function fieldLabels(): Record<string, string> {
+  const { review } = t();
+  return {
+    merchant: review.merchant,
+    date: review.date,
+    time: review.time,
+    total: review.total,
+    paymentMethod: review.payment,
+    category: review.category,
+    items: review.productsField,
+  };
+}
 
 export type SaveBlocker =
   | { kind: "toCheck"; count: number }
@@ -216,7 +220,8 @@ export function saveBlockers(review: Review, today: string, currentTime: string)
   }
   const validation = validateScannedDocument(toDocumentBody(review), today, currentTime);
   if (!validation.ok && blockers.length === 0) {
-    const fields = validation.fields.filter((field) => field in FIELD_LABELS).map((field) => FIELD_LABELS[field]);
+    const labels = fieldLabels();
+    const fields = validation.fields.filter((field) => field in labels).map((field) => labels[field]);
     blockers.push({ kind: "fields", fields });
   }
   return blockers;

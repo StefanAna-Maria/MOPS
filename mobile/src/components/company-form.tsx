@@ -8,6 +8,7 @@ import { isValidCui, type Company } from "@ocrinvoice/shared";
 import { useProfile } from "@/lib/profile-context";
 import { showServerUnavailable } from "@/lib/alerts";
 import { colors, spacing, typography } from "@/constants/theme";
+import { useT } from "@/i18n";
 
 type CompanyFormProps = {
   submitTitle: string;
@@ -15,6 +16,7 @@ type CompanyFormProps = {
 };
 
 export function CompanyForm({ submitTitle, onSaved }: CompanyFormProps) {
+  const t = useT();
   const { setCompany, reload } = useProfile();
   const [cui, setCui] = useState("");
   const [name, setName] = useState("");
@@ -47,9 +49,9 @@ export function CompanyForm({ submitTitle, onSaved }: CompanyFormProps) {
       if (!response.ok) {
         const data = await response.json().catch(() => null);
         if (data?.code === "INVALID_CUI") {
-          Alert.alert("CUI invalid", "Verifică CUI-ul și încearcă din nou.");
+          Alert.alert(t.company.cuiInvalidTitle, t.company.cuiInvalidRetry);
         } else {
-          Alert.alert("Nu am putut salva firma", "Verifică datele și încearcă din nou.");
+          Alert.alert(t.company.saveFailedTitle, t.common.checkDataAndRetry);
         }
         return;
       }
@@ -67,7 +69,7 @@ export function CompanyForm({ submitTitle, onSaved }: CompanyFormProps) {
     <Card>
       <View style={styles.field}>
         <TextField
-          label="CUI"
+          label={t.company.cui}
           value={cui}
           onChangeText={setCui}
           placeholder="RO12345678"
@@ -75,18 +77,24 @@ export function CompanyForm({ submitTitle, onSaved }: CompanyFormProps) {
           autoCorrect={false}
           maxLength={14}
         />
-        {showCuiError ? <Text style={styles.error}>CUI-ul nu este valid.</Text> : null}
+        {showCuiError ? <Text style={styles.error}>{t.company.cuiInvalid}</Text> : null}
       </View>
-      <TextField label="Denumire" value={name} onChangeText={setName} placeholder="Exemplu SRL" maxLength={200} />
       <TextField
-        label="Adresă"
+        label={t.company.name}
+        value={name}
+        onChangeText={setName}
+        placeholder={t.company.namePlaceholder}
+        maxLength={200}
+      />
+      <TextField
+        label={t.company.address}
         value={address}
         onChangeText={setAddress}
-        placeholder="Str. Exemplu nr. 1, București"
+        placeholder={t.company.addressPlaceholder}
         maxLength={300}
       />
       <TextField
-        label="Nr. Registrul Comerțului (opțional)"
+        label={t.company.registrationNumber}
         value={registrationNumber}
         onChangeText={setRegistrationNumber}
         placeholder="J40/1234/2020"
@@ -95,7 +103,7 @@ export function CompanyForm({ submitTitle, onSaved }: CompanyFormProps) {
         maxLength={30}
       />
       <View style={styles.switchRow}>
-        <Text style={styles.switchLabel}>Plătitor de TVA</Text>
+        <Text style={styles.switchLabel}>{t.company.vatPayer}</Text>
         <Switch
           value={vatPayer}
           onValueChange={setVatPayer}
