@@ -24,6 +24,19 @@ export const DOCUMENT_MESSAGES = {
   deleteFailed: "Încearcă din nou.",
 };
 
+// US-13: correcting a saved document.
+export const EDIT_MESSAGES = {
+  open: "Editează documentul",
+  title: "Editează documentul",
+  save: "Salvează modificările",
+  cancel: "Renunță",
+  merchantLabel: "Magazin",
+  /** A scanned receipt or invoice keeps its products as they were read and checked. */
+  productsKept: "Produsele rămân așa cum au fost citite.",
+  saveFailedTitle: "Nu am putut salva modificările",
+  saveFailed: "Verifică datele și încearcă din nou.",
+};
+
 export const SCAN_MESSAGES = {
   title: "Citirea bonului",
   doneTitle: "Ce am citit",

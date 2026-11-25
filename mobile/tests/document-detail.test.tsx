@@ -1,4 +1,5 @@
-import { fireEvent, render, screen } from "@testing-library/react-native";
+import { useEffect } from "react";
+import { act, fireEvent, render, screen } from "@testing-library/react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import type { ExpenseDocument } from "@ocrinvoice/shared";
 import DocumentScreen from "@/app/(app)/document/[id]";
@@ -223,5 +224,98 @@ describe("US-06: Notă", () => {
 
     await screen.findByRole("header", { name: "Farmacia Tei" });
     expect(screen.queryByText("Notă")).toBeNull();
+  });
+});
+
+describe("US-13: Editează documentul", () => {
+  it("CA-13.1: opens the editing of the document", async () => {
+    respond(200, { document });
+    await render(<DocumentScreen />);
+
+    await fireEvent.press(await screen.findByRole("button", { name: "Editează documentul" }));
+
+    expect(router.push).toHaveBeenCalledWith({ pathname: "/edit-document/[id]", params: { id: "doc-1" } });
+  });
+
+  it("CA-13.1: a scanned document can be edited too", async () => {
+    respond(200, { document: { ...document, type: "SCANNED", lines: [] } });
+    await render(<DocumentScreen />);
+
+    expect(await screen.findByRole("button", { name: "Editează documentul" })).toBeOnTheScreen();
+  });
+
+  it("CA-13.1: Editează documentul is above Șterge documentul", async () => {
+    respond(200, { document });
+    await render(<DocumentScreen />);
+
+    await screen.findByRole("button", { name: "Editează documentul" });
+
+    const titles = screen.getAllByText(/Editează documentul|Șterge documentul/).map((node) => node.props.children);
+    expect(titles).toEqual(["Editează documentul", "Șterge documentul"]);
+  });
+
+  it("CA-13.1: shows the note a user added to a scanned document", async () => {
+    respond(200, { document: { ...document, type: "SCANNED", note: "fără pungă", lines: [] } });
+
+    await render(<DocumentScreen />);
+
+    expect(await screen.findByText("Notă")).toBeOnTheScreen();
+    expect(screen.getByText("fără pungă")).toBeOnTheScreen();
+  });
+
+  describe("coming back to the screen after a correction (CA-13.2)", () => {
+    // The screen reloads the document each time it comes back into focus; the test triggers that by hand.
+    let refocus: () => void = () => {};
+
+    beforeEach(() => {
+      const expoRouter = jest.requireMock("expo-router");
+      jest.spyOn(expoRouter, "useFocusEffect").mockImplementation((effect: unknown) => {
+        const run = effect as () => void | (() => void);
+        useEffect(() => run(), [run]);
+        refocus = run as () => void;
+      });
+    });
+
+    it("shows the corrected document after coming back", async () => {
+      respond(200, { document });
+      await render(<DocumentScreen />);
+      expect(await screen.findByText("1.234,50 lei")).toBeOnTheScreen();
+
+      respond(200, { document: { ...document, merchant: "Farmacia Catena", total: "99.90" } });
+      await act(async () => {
+        refocus();
+      });
+
+      expect(await screen.findByRole("header", { name: "Farmacia Catena" })).toBeOnTheScreen();
+      expect(screen.getByText("99,90 lei")).toBeOnTheScreen();
+      expect(screen.queryByText("1.234,50 lei")).toBeNull();
+    });
+
+    it("keeps the document shown when the reload fails", async () => {
+      respond(200, { document });
+      await render(<DocumentScreen />);
+      expect(await screen.findByText("1.234,50 lei")).toBeOnTheScreen();
+
+      apiFetchMock.mockRejectedValueOnce(new Error("timeout"));
+      await act(async () => {
+        refocus();
+      });
+
+      expect(screen.getByRole("header", { name: "Farmacia Tei" })).toBeOnTheScreen();
+      expect(screen.queryByText(HOME_MESSAGES.loadError)).toBeNull();
+    });
+
+    it("shows Documentul nu a fost găsit. when the document was deleted meanwhile", async () => {
+      respond(200, { document });
+      await render(<DocumentScreen />);
+      await screen.findByText("1.234,50 lei");
+
+      respond(404, { code: "DOCUMENT_NOT_FOUND" });
+      await act(async () => {
+        refocus();
+      });
+
+      expect(await screen.findByText(DOCUMENT_MESSAGES.notFound)).toBeOnTheScreen();
+    });
   });
 });
