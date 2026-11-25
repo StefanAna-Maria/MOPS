@@ -7,8 +7,10 @@ import { PrimaryButton } from "@/components/primary-button";
 import { apiFetch } from "@/lib/api";
 import { useProfile } from "@/lib/profile-context";
 import { showServerUnavailable } from "@/lib/alerts";
+import { useT } from "@/i18n";
 
 export default function OnboardingNameScreen() {
+  const t = useT();
   const { setProfile } = useProfile();
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -24,7 +26,7 @@ export default function OnboardingNameScreen() {
         body: JSON.stringify({ firstName: firstName.trim(), lastName: lastName.trim() }),
       });
       if (!response.ok) {
-        Alert.alert("Nu am putut salva numele", "Încearcă din nou.");
+        Alert.alert(t.onboardingName.saveFailedTitle, t.common.tryAgain);
         return;
       }
       const data = await response.json();
@@ -37,10 +39,10 @@ export default function OnboardingNameScreen() {
   }
 
   return (
-    <Screen title="Cum te numești?" subtitle="Așa te vom saluta în aplicație.">
+    <Screen title={t.onboardingName.title} subtitle={t.onboardingName.subtitle}>
       <Card>
         <TextField
-          label="Prenume"
+          label={t.onboardingName.firstName}
           value={firstName}
           onChangeText={setFirstName}
           autoCapitalize="words"
@@ -49,7 +51,7 @@ export default function OnboardingNameScreen() {
           maxLength={50}
         />
         <TextField
-          label="Nume"
+          label={t.onboardingName.lastName}
           value={lastName}
           onChangeText={setLastName}
           autoCapitalize="words"
@@ -57,7 +59,7 @@ export default function OnboardingNameScreen() {
           textContentType="familyName"
           maxLength={50}
         />
-        <PrimaryButton title="Continuă" onPress={handleContinue} disabled={!canContinue} loading={loading} />
+        <PrimaryButton title={t.common.continue} onPress={handleContinue} disabled={!canContinue} loading={loading} />
       </Card>
     </Screen>
   );

@@ -2,14 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
-import {
-  DEFAULT_PAYMENT_METHOD,
-  DOCUMENT_TYPE_LABELS,
-  formatDisplayDate,
-  isPaymentMethod,
-  type DocumentType,
-  type ExpenseDocument,
-} from "@ocrinvoice/shared";
+import { DEFAULT_PAYMENT_METHOD, formatDisplayDate, isPaymentMethod, type ExpenseDocument } from "@ocrinvoice/shared";
 import { Card } from "@/components/card";
 import { ExpenseFormFields } from "@/components/expense-form-fields";
 import { PrimaryButton } from "@/components/primary-button";
@@ -19,6 +12,7 @@ import { showServerUnavailable } from "@/lib/alerts";
 import { DOCUMENT_MESSAGES, EDIT_MESSAGES, HOME_MESSAGES } from "@/lib/expense-messages";
 import { useExpenseForm } from "@/lib/use-expense-form";
 import { colors, spacing, typography } from "@/constants/theme";
+import { useT } from "@/i18n";
 
 type DocumentState =
   | { status: "loading" }
@@ -52,6 +46,7 @@ function CancelLink() {
 
 /** CA-13.1: the saved values, to be corrected with the same fields and checks as when an expense is added. */
 function EditForm({ document }: { document: ExpenseDocument }) {
+  const t = useT();
   const isManual = document.type === "MANUAL";
   const form = useExpenseForm({
     description: document.merchant,
@@ -105,13 +100,13 @@ function EditForm({ document }: { document: ExpenseDocument }) {
     }
   }
 
-  const typeLabel = DOCUMENT_TYPE_LABELS[document.type as DocumentType] ?? document.type;
+  const typeLabel = t.documentTypes[document.type] ?? document.type;
   return (
     <Screen title={EDIT_MESSAGES.title} subtitle={isManual ? typeLabel : `${typeLabel}. ${EDIT_MESSAGES.productsKept}`}>
       <Card>
         <ExpenseFormFields
           form={form}
-          descriptionLabel={isManual ? "Pentru ce ai plătit?" : EDIT_MESSAGES.merchantLabel}
+          descriptionLabel={isManual ? t.expense.descriptionLabel : EDIT_MESSAGES.merchantLabel}
         />
         <PrimaryButton title={EDIT_MESSAGES.save} onPress={handleSave} disabled={!form.canSubmit} loading={loading} />
       </Card>
@@ -121,6 +116,7 @@ function EditForm({ document }: { document: ExpenseDocument }) {
 }
 
 export default function EditDocumentScreen() {
+  const t = useT();
   const { id } = useLocalSearchParams<{ id: string }>();
   const documentId = id ? String(id) : "";
   const [state, setState] = useState<DocumentState>({ status: "loading" });
@@ -151,7 +147,7 @@ export default function EditDocumentScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.state}>
-        {state.status === "loading" ? <ActivityIndicator color={colors.primary} accessibilityLabel="Se încarcă" /> : null}
+        {state.status === "loading" ? <ActivityIndicator color={colors.primary} accessibilityLabel={t.common.loading} /> : null}
         {state.status === "notFound" ? <Text style={styles.stateText}>{DOCUMENT_MESSAGES.notFound}</Text> : null}
         {state.status === "error" ? (
           <>

@@ -7,6 +7,8 @@ import { PrimaryButton } from "@/components/primary-button";
 import { TextField } from "@/components/text-field";
 import { createCategory, deleteCategory, saveCategoryOrder, type CategoryError } from "@/lib/categories";
 import { CATEGORY_MESSAGES } from "@/lib/expense-messages";
+import { categoryLabel } from "@/lib/expense-list";
+import { useT } from "@/i18n";
 import { showServerUnavailable } from "@/lib/alerts";
 import { colors, radius, spacing, typography } from "@/constants/theme";
 
@@ -53,7 +55,10 @@ export function CategoryField({
   const [savingOrder, setSavingOrder] = useState(false);
   const reordering = draft !== null;
 
+  const t = useT();
+  const nameOf = (category: CategoryOption) => (category.builtIn ? categoryLabel(category.id) : category.name);
   const selected = categories.find((category) => category.id === value);
+  const selectedName = selected ? nameOf(selected) : t.categories.OTHER;
 
   async function handleAdd() {
     const name = newName.trim();
@@ -118,7 +123,7 @@ export function CategoryField({
   }
 
   function handleDelete(category: CategoryOption) {
-    Alert.alert(CATEGORY_MESSAGES.confirmTitle, CATEGORY_MESSAGES.confirmText(category.name), [
+    Alert.alert(CATEGORY_MESSAGES.confirmTitle, CATEGORY_MESSAGES.confirmText(nameOf(category)), [
       { text: CATEGORY_MESSAGES.cancel, style: "cancel" },
       {
         text: CATEGORY_MESSAGES.confirmDelete,
@@ -143,11 +148,11 @@ export function CategoryField({
       <Text style={styles.label}>{label}</Text>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={`${label}: ${selected?.name ?? "Altele"}`}
+        accessibilityLabel={`${label}: ${selectedName}`}
         onPress={() => setOpen(true)}
         style={({ pressed }) => [styles.box, pressed && styles.pressed]}
       >
-        <Text style={styles.value}>{selected?.name ?? "Altele"}</Text>
+        <Text style={styles.value}>{selectedName}</Text>
         <Text style={styles.chevron}>▾</Text>
       </Pressable>
 
@@ -166,10 +171,10 @@ export function CategoryField({
           {reordering
             ? draft.map((category, index) => (
                 <View key={category.id} style={styles.row}>
-                  <Text style={[styles.rowText, styles.rowTextReorder]}>{category.name}</Text>
+                  <Text style={[styles.rowText, styles.rowTextReorder]}>{nameOf(category)}</Text>
                   <Pressable
                     accessibilityRole="button"
-                    accessibilityLabel={CATEGORY_MESSAGES.moveUp(category.name)}
+                    accessibilityLabel={CATEGORY_MESSAGES.moveUp(nameOf(category))}
                     accessibilityState={{ disabled: index === 0 }}
                     disabled={index === 0}
                     onPress={() => move(index, -1)}
@@ -180,7 +185,7 @@ export function CategoryField({
                   </Pressable>
                   <Pressable
                     accessibilityRole="button"
-                    accessibilityLabel={CATEGORY_MESSAGES.moveDown(category.name)}
+                    accessibilityLabel={CATEGORY_MESSAGES.moveDown(nameOf(category))}
                     accessibilityState={{ disabled: index === draft.length - 1 }}
                     disabled={index === draft.length - 1}
                     onPress={() => move(index, 1)}
@@ -202,20 +207,20 @@ export function CategoryField({
                 <Pressable
                   accessibilityRole="button"
                   accessibilityState={{ selected: isSelected }}
-                  accessibilityLabel={category.name}
+                  accessibilityLabel={nameOf(category)}
                   onPress={() => {
                     onChange(category.id);
                     close();
                   }}
                   style={({ pressed }) => [styles.rowMain, pressed && styles.pressed]}
                 >
-                  <Text style={[styles.rowText, isSelected && styles.rowTextSelected]}>{category.name}</Text>
+                  <Text style={[styles.rowText, isSelected && styles.rowTextSelected]}>{nameOf(category)}</Text>
                   {isSelected ? <Ionicons name="checkmark" size={18} color={colors.primary} /> : null}
                 </Pressable>
                 {category.id !== DEFAULT_CATEGORY_ID ? (
                   <Pressable
                     accessibilityRole="button"
-                    accessibilityLabel={CATEGORY_MESSAGES.delete(category.name)}
+                    accessibilityLabel={CATEGORY_MESSAGES.delete(nameOf(category))}
                     onPress={() => handleDelete(category)}
                     hitSlop={8}
                     style={({ pressed }) => [styles.deleteButton, pressed && styles.pressed]}

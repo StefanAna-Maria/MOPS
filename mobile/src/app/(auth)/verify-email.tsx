@@ -10,8 +10,10 @@ import { authClient } from "@/lib/auth-client";
 import { formatCountdown, useResendCountdown } from "@/lib/resend-countdown";
 import { showServerUnavailable, showTooManyAttempts } from "@/lib/alerts";
 import { colors, typography } from "@/constants/theme";
+import { useT } from "@/i18n";
 
 export default function VerifyEmailScreen() {
+  const t = useT();
   const params = useLocalSearchParams<{ email?: string }>();
   const email = params.email ?? "";
 
@@ -32,13 +34,13 @@ export default function VerifyEmailScreen() {
       if (error.status === 429) {
         showTooManyAttempts();
       } else if (error.code === "OTP_EXPIRED") {
-        Alert.alert("Codul a expirat", "Cere un cod nou și încearcă din nou.");
+        Alert.alert(t.code.expiredTitle, t.code.tooManyAttempts);
       } else if (error.code === "TOO_MANY_ATTEMPTS") {
-        Alert.alert("Prea multe încercări", "Cere un cod nou și încearcă din nou.");
+        Alert.alert(t.common.tooManyAttemptsTitle, t.code.tooManyAttempts);
       } else if (error.code === "INVALID_OTP") {
-        Alert.alert("Cod greșit", "Codul nu se potrivește. Verifică emailul și scrie-l din nou.");
+        Alert.alert(t.code.wrongTitle, t.code.wrong);
       } else {
-        Alert.alert("Nu am putut confirma adresa", "Încearcă din nou.");
+        Alert.alert(t.verifyEmail.failedTitle, t.common.tryAgain);
       }
     } catch {
       showServerUnavailable();
@@ -55,7 +57,7 @@ export default function VerifyEmailScreen() {
         if (error.status === 429) {
           showTooManyAttempts();
         } else {
-          Alert.alert("Nu am putut trimite codul", "Încearcă din nou.");
+          Alert.alert(t.code.sendFailedTitle, t.common.tryAgain);
         }
         return;
       }
@@ -69,24 +71,24 @@ export default function VerifyEmailScreen() {
   }
 
   return (
-    <Screen title="Verifică-ți emailul" subtitle={`Am trimis un cod de ${CODE_LENGTH} cifre la ${email}.`}>
+    <Screen title={t.verifyEmail.title} subtitle={t.code.sent(CODE_LENGTH, email)}>
       <Card>
         <CodeInput value={code} onChangeText={setCode} editable={!loading} />
         <PrimaryButton
-          title="Confirmă"
+          title={t.verifyEmail.confirm}
           onPress={handleVerify}
           disabled={code.length !== CODE_LENGTH}
           loading={loading}
         />
         {secondsLeft > 0 ? (
-          <Text style={styles.countdown}>Poți cere un cod nou în {formatCountdown(secondsLeft)}</Text>
+          <Text style={styles.countdown}>{t.code.resendIn(formatCountdown(secondsLeft))}</Text>
         ) : (
           <Pressable accessibilityRole="button" onPress={handleResend} disabled={resending}>
-            <Text style={styles.resend}>Trimite un cod nou</Text>
+            <Text style={styles.resend}>{t.code.resend}</Text>
           </Pressable>
         )}
       </Card>
-      <TextLink href="/sign-in">Înapoi la „Intră în cont”</TextLink>
+      <TextLink href="/sign-in">{t.signIn.backToSignIn}</TextLink>
     </Screen>
   );
 }

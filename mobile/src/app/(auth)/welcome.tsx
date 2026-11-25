@@ -14,37 +14,15 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { PrimaryButton } from "@/components/primary-button";
 import { colors, radius, spacing, typography } from "@/constants/theme";
+import { useT } from "@/i18n";
 
-type Slide = {
-  icon: ComponentProps<typeof Ionicons>["name"];
-  title: string;
-  description: string;
-};
+type SlideIcon = ComponentProps<typeof Ionicons>["name"];
 
-const slides: Slide[] = [
-  {
-    icon: "scan-outline",
-    title: "Scanează bonuri și facturi",
-    description: "Fotografiezi documentul, iar aplicația citește automat magazinul, data și totalul.",
-  },
-  {
-    icon: "create-outline",
-    title: "Verifici și corectezi",
-    description: "Poți modifica oricând datele citite sau poți adăuga manual o cheltuială.",
-  },
-  {
-    icon: "stats-chart-outline",
-    title: "Vezi unde se duc banii",
-    description: "Statistici clare, ca să înțelegi cum cheltuiești în fiecare lună.",
-  },
-  {
-    icon: "briefcase-outline",
-    title: "Personal sau pentru firmă",
-    description: "Ții separat cheltuielile personale de cele ale firmei, în același cont.",
-  },
-];
+const SLIDE_ICONS: SlideIcon[] = ["scan-outline", "create-outline", "stats-chart-outline", "briefcase-outline"];
 
 export default function WelcomeScreen() {
+  const t = useT();
+  const slides = t.welcome.slides.map((slide, index) => ({ ...slide, icon: SLIDE_ICONS[index] }));
   const { width } = useWindowDimensions();
   const [activeIndex, setActiveIndex] = useState(0);
 
@@ -88,8 +66,8 @@ export default function WelcomeScreen() {
       </View>
 
       <View style={styles.actions}>
-        <PrimaryButton title="Creează cont" onPress={() => router.push("/sign-up")} />
-        <PrimaryButton title="Am deja cont" variant="outline" onPress={() => router.push("/sign-in")} />
+        <PrimaryButton title={t.welcome.createAccount} onPress={() => router.push("/sign-up")} />
+        <PrimaryButton title={t.welcome.haveAccount} variant="outline" onPress={() => router.push("/sign-in")} />
       </View>
     </SafeAreaView>
   );

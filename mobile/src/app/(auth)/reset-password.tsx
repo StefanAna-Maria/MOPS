@@ -13,8 +13,10 @@ import { formatCountdown, useResendCountdown } from "@/lib/resend-countdown";
 import { showServerUnavailable, showTooManyAttempts } from "@/lib/alerts";
 import { isStrongPassword } from "@ocrinvoice/shared";
 import { colors, typography } from "@/constants/theme";
+import { useT } from "@/i18n";
 
 export default function ResetPasswordScreen() {
+  const t = useT();
   const params = useLocalSearchParams<{ email?: string }>();
   const email = params.email ?? "";
 
@@ -34,25 +36,25 @@ export default function ResetPasswordScreen() {
         if (error.status === 429) {
           showTooManyAttempts();
         } else if (error.code === "PASSWORD_TOO_WEAK") {
-          Alert.alert("Parolă prea slabă", "Parola trebuie să respecte toate cele trei reguli.");
+          Alert.alert(t.password.tooWeakTitle, t.password.tooWeak);
         } else if (error.code === "OTP_EXPIRED") {
           setCode("");
-          Alert.alert("Codul a expirat", "Cere un cod nou și încearcă din nou.");
+          Alert.alert(t.code.expiredTitle, t.code.tooManyAttempts);
         } else if (error.code === "TOO_MANY_ATTEMPTS") {
           setCode("");
-          Alert.alert("Prea multe încercări", "Cere un cod nou și încearcă din nou.");
+          Alert.alert(t.common.tooManyAttemptsTitle, t.code.tooManyAttempts);
         } else if (error.code === "INVALID_OTP") {
           setCode("");
-          Alert.alert("Cod greșit", "Codul nu se potrivește. Verifică emailul și scrie-l din nou.");
+          Alert.alert(t.code.wrongTitle, t.code.wrong);
         } else {
-          Alert.alert("Nu am putut schimba parola", "Încearcă din nou.");
+          Alert.alert(t.resetPassword.failedTitle, t.common.tryAgain);
         }
         return;
       }
       // Password changed: sign in with it (CA-02.12). The root layout then opens the app.
       const signIn = await authClient.signIn.email({ email, password });
       if (signIn.error) {
-        Alert.alert("Parola a fost schimbată", "Intră în cont cu noua parolă.");
+        Alert.alert(t.resetPassword.doneTitle, t.resetPassword.done);
         router.replace("/sign-in");
       }
     } catch {
@@ -70,7 +72,7 @@ export default function ResetPasswordScreen() {
         if (error.status === 429) {
           showTooManyAttempts();
         } else {
-          Alert.alert("Nu am putut trimite codul", "Încearcă din nou.");
+          Alert.alert(t.code.sendFailedTitle, t.common.tryAgain);
         }
         return;
       }
@@ -84,27 +86,27 @@ export default function ResetPasswordScreen() {
   }
 
   return (
-    <Screen title="Parolă nouă" subtitle={`Am trimis un cod de ${CODE_LENGTH} cifre la ${email}.`}>
+    <Screen title={t.resetPassword.title} subtitle={t.code.sent(CODE_LENGTH, email)}>
       <Card>
         <CodeInput value={code} onChangeText={setCode} editable={!loading} />
         <PasswordField
-          label="Parolă nouă"
+          label={t.resetPassword.newPassword}
           value={password}
           onChangeText={setPassword}
           autoComplete="new-password"
           textContentType="newPassword"
         />
         <PasswordChecklist password={password} />
-        <PrimaryButton title="Schimbă parola" onPress={handleReset} disabled={!canSubmit} loading={loading} />
+        <PrimaryButton title={t.resetPassword.submit} onPress={handleReset} disabled={!canSubmit} loading={loading} />
         {secondsLeft > 0 ? (
-          <Text style={styles.countdown}>Poți cere un cod nou în {formatCountdown(secondsLeft)}</Text>
+          <Text style={styles.countdown}>{t.code.resendIn(formatCountdown(secondsLeft))}</Text>
         ) : (
           <Pressable accessibilityRole="button" onPress={handleResend} disabled={resending}>
-            <Text style={styles.resend}>Trimite un cod nou</Text>
+            <Text style={styles.resend}>{t.code.resend}</Text>
           </Pressable>
         )}
       </Card>
-      <TextLink href="/sign-in">Înapoi la „Intră în cont”</TextLink>
+      <TextLink href="/sign-in">{t.signIn.backToSignIn}</TextLink>
     </Screen>
   );
 }

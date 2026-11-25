@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors, radius, spacing, typography } from "@/constants/theme";
+import { useT } from "@/i18n";
 
 type BottomSheetProps = {
   visible: boolean;
@@ -11,6 +12,7 @@ type BottomSheetProps = {
 };
 
 export function BottomSheet({ visible, title, onClose, children }: BottomSheetProps) {
+  const t = useT();
   const insets = useSafeAreaInsets();
 
   return (
@@ -18,7 +20,7 @@ export function BottomSheet({ visible, title, onClose, children }: BottomSheetPr
       <View style={styles.container}>
         {/* The backdrop is a layer behind the sheet, not around it: a touchable wrapped around the sheet took the
             touches that start on plain text inside it, so its lists could not scroll (e.g. "Schimbă ordinea"). */}
-        <Pressable style={[StyleSheet.absoluteFill, styles.backdrop]} onPress={onClose} accessibilityLabel="Închide" />
+        <Pressable style={[StyleSheet.absoluteFill, styles.backdrop]} onPress={onClose} accessibilityLabel={t.common.close} />
         <View style={[styles.sheet, { paddingBottom: insets.bottom + spacing.lg }]}>
           <View style={styles.handle} />
           <Text style={styles.title}>{title}</Text>

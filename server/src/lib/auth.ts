@@ -4,7 +4,7 @@ import { APIError, createAuthMiddleware } from "better-auth/api";
 import { emailOTP } from "better-auth/plugins";
 import { expo } from "@better-auth/expo";
 import { prisma } from "./prisma.js";
-import { passwordResetEmail, sendEmail, verificationEmail } from "./email.js";
+import { emailLanguage, passwordResetEmail, sendEmail, verificationEmail } from "./email.js";
 import { USAGE_TYPES, isStrongPassword, isUsageType } from "@ocrinvoice/shared";
 
 export const auth = betterAuth({
@@ -115,14 +115,15 @@ export const auth = betterAuth({
       otpLength: 6,
       expiresIn: 300,
       storeOTP: "hashed",
-      async sendVerificationOTP({ email, otp, type }) {
+      async sendVerificationOTP({ email, otp, type }, ctx) {
         if (process.env.NODE_ENV === "development") {
           console.log(`[email-otp] ${type} ${email}: ${otp}`);
         }
+        const language = emailLanguage(ctx?.headers?.get("accept-language") ?? ctx?.request?.headers.get("accept-language"));
         if (type === "email-verification") {
-          await sendEmail(verificationEmail(email, otp));
+          await sendEmail(verificationEmail(email, otp, language));
         } else if (type === "forget-password") {
-          await sendEmail(passwordResetEmail(email, otp));
+          await sendEmail(passwordResetEmail(email, otp, language));
         }
       },
     }),

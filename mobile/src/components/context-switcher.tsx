@@ -7,13 +7,15 @@ import { apiFetch } from "@/lib/api";
 import { useProfile, type ActiveContext } from "@/lib/profile-context";
 import { showServerUnavailable } from "@/lib/alerts";
 import { colors, radius, spacing, typography } from "@/constants/theme";
+import { useT } from "@/i18n";
 
 export function ContextSwitcher() {
+  const t = useT();
   const { profile, company, activeContext, setActiveContext, setProfile } = useProfile();
   const [open, setOpen] = useState(false);
 
   const personalEnabled = profile?.personalEnabled ?? false;
-  const activeLabel = activeContext === "company" && company ? company.name : "Personal";
+  const activeLabel = activeContext === "company" && company ? company.name : t.profile.personal;
 
   function select(context: ActiveContext) {
     setActiveContext(context);
@@ -29,7 +31,7 @@ export function ContextSwitcher() {
     try {
       const response = await apiFetch("/api/me/personal", { method: "POST" });
       if (!response.ok) {
-        Alert.alert("Nu am putut activa profilul personal", "Încearcă din nou.");
+        Alert.alert(t.profile.enablePersonalFailed, t.common.tryAgain);
         return;
       }
       const data = await response.json();
@@ -44,7 +46,7 @@ export function ContextSwitcher() {
     <>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={`Profil activ: ${activeLabel}`}
+        accessibilityLabel={t.profile.activeProfile(activeLabel)}
         onPress={() => setOpen(true)}
         style={({ pressed }) => [styles.trigger, pressed && styles.pressed]}
       >
@@ -53,9 +55,9 @@ export function ContextSwitcher() {
         </Text>
         <Text style={styles.chevron}>▾</Text>
       </Pressable>
-      <BottomSheet visible={open} title="Alege profilul" onClose={() => setOpen(false)}>
+      <BottomSheet visible={open} title={t.profile.choose} onClose={() => setOpen(false)}>
         {personalEnabled ? (
-          <SheetOption title="Personal" selected={activeContext === "personal"} onPress={() => select("personal")} />
+          <SheetOption title={t.profile.personal} selected={activeContext === "personal"} onPress={() => select("personal")} />
         ) : null}
         {company ? (
           <SheetOption
@@ -65,9 +67,9 @@ export function ContextSwitcher() {
             onPress={() => select("company")}
           />
         ) : null}
-        {!company ? <SheetOption title="+ Adaugă firma" tone="action" onPress={handleAddCompany} /> : null}
+        {!company ? <SheetOption title={t.profile.addCompany} tone="action" onPress={handleAddCompany} /> : null}
         {!personalEnabled ? (
-          <SheetOption title="+ Activează profilul personal" tone="action" onPress={handleEnablePersonal} />
+          <SheetOption title={t.profile.enablePersonal} tone="action" onPress={handleEnablePersonal} />
         ) : null}
       </BottomSheet>
     </>

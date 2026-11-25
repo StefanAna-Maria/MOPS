@@ -2,8 +2,10 @@ import { useEffect, useState } from "react";
 import { Animated, Easing, Image, StyleSheet, Text, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { colors, radius, spacing, typography } from "@/constants/theme";
+import { useT } from "@/i18n";
 
 export function BrandLoading() {
+  const t = useT();
   const [entrance] = useState(() => new Animated.Value(0));
 
   useEffect(() => {
@@ -18,7 +20,7 @@ export function BrandLoading() {
   const scale = entrance.interpolate({ inputRange: [0, 1], outputRange: [0.92, 1] });
 
   return (
-    <View style={styles.container} accessibilityLabel="Se încarcă OCRInvoice">
+    <View style={styles.container} accessibilityLabel={`${t.common.loading} OCRInvoice`}>
       <StatusBar style="light" />
       <Animated.View style={[styles.brand, { opacity: entrance, transform: [{ scale }] }]}>
         <Image source={require("@/assets/images/logo-mark.png")} style={styles.logo} />

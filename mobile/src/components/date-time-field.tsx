@@ -5,6 +5,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { BottomSheet } from "@/components/bottom-sheet";
 import { PrimaryButton } from "@/components/primary-button";
 import { colors, radius, spacing, typography } from "@/constants/theme";
+import { formatDate, useLanguage, useT } from "@/i18n";
 
 type DateTimeFieldProps = {
   label: string;
@@ -43,6 +44,11 @@ function toPickerDate(mode: "date" | "time", value: string, fallback: Date) {
 }
 
 export function DateTimeField({ label, mode, value, onChange, maximumDate, placeholder, error }: DateTimeFieldProps) {
+  const t = useT();
+  const { language } = useLanguage();
+  // CA-17.3: the value is kept as "12.11.2026" and shown in the current language ("11/12/2026" in English).
+  const dateMatch = mode === "date" ? /^(\d{2})\.(\d{2})\.(\d{4})$/.exec(value) : null;
+  const shown = dateMatch ? formatDate(`${dateMatch[3]}-${dateMatch[2]}-${dateMatch[1]}`, language) : value;
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<Date>(() => new Date());
   const format = mode === "date" ? formatPickedDate : formatPickedTime;
@@ -75,12 +81,12 @@ export function DateTimeField({ label, mode, value, onChange, maximumDate, place
       <Text style={styles.label}>{label}</Text>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={`${label}: ${value || placeholder}`}
+        accessibilityLabel={`${label}: ${shown || placeholder}`}
         accessibilityHint={error ?? undefined}
         onPress={openPicker}
         style={({ pressed }) => [styles.box, !!error && styles.boxError, pressed && styles.pressed]}
       >
-        <Text style={[styles.value, !value && styles.placeholder]}>{value || placeholder}</Text>
+        <Text style={[styles.value, !value && styles.placeholder]}>{shown || placeholder}</Text>
         <Ionicons name={mode === "date" ? "calendar-outline" : "time-outline"} size={20} color={colors.textSecondary} />
       </Pressable>
       {error ? <Text style={styles.error}>{error}</Text> : null}
@@ -90,7 +96,7 @@ export function DateTimeField({ label, mode, value, onChange, maximumDate, place
           mode={mode}
           display={display}
           maximumDate={maximumDate}
-          locale="ro-RO"
+          locale={language === "en" ? "en-US" : "ro-RO"}
           accentColor={colors.primary}
           themeVariant="light"
           onChange={(_event: DateTimePickerEvent, picked?: Date) => {
@@ -100,7 +106,7 @@ export function DateTimeField({ label, mode, value, onChange, maximumDate, place
           }}
         />
         <PrimaryButton
-          title="Gata"
+          title={t.common.done}
           onPress={() => {
             onChange(format(draft));
             setOpen(false);
