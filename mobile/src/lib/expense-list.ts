@@ -1,10 +1,13 @@
 import {
+  amountToCents,
   DOCUMENT_TYPE_LABELS,
   EXPENSE_CATEGORY_LABELS,
   isExpenseCategory,
   type DocumentType,
   type ExpenseDocument,
 } from "@ocrinvoice/shared";
+
+export { amountToCents };
 
 const WEEKDAYS = ["DUMINICĂ", "LUNI", "MARȚI", "MIERCURI", "JOI", "VINERI", "SÂMBĂTĂ"];
 const MONTHS = [
@@ -28,15 +31,6 @@ export type DaySection = {
   totalCents: number;
   data: ExpenseDocument[];
 };
-
-/** "12.50" → 1250. Amounts come from the server with exactly two decimals. */
-export function amountToCents(amount: string): number {
-  // Discounts read from receipts are negative ("-3.20"): the sign applies to the decimals too.
-  const negative = amount.trim().startsWith("-");
-  const [units, decimals = ""] = amount.trim().replace(/^-/, "").split(".");
-  const cents = Number(units) * 100 + Number(decimals.padEnd(2, "0").slice(0, 2));
-  return negative ? -cents : cents;
-}
 
 /** 123450 → "1.234,50 lei", -320 → "-3,20 lei" (Romanian format: dot for thousands, comma for decimals). */
 export function formatLei(cents: number): string {

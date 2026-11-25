@@ -5,15 +5,22 @@ import { resolveContext } from "../lib/context.js";
 import { categoryName, customCategoryNames, isUsersCategory } from "../lib/categories.js";
 import { Prisma } from "../generated/prisma/client.js";
 import {
+  amountToCents,
+  centsToAmount,
+  computeCategoryShares,
   DEFAULT_DOCUMENT_FILTER,
   DEFAULT_TIME_ZONE,
   DOCUMENT_FILTER_TYPES,
   isDocumentFilter,
   isValidTimeZone,
   monthBounds,
+  monthVariationPercent,
+  previousMonthBounds,
   todayInTimeZone,
   validateManualExpense,
+  type CategoryBreakdownItem,
   type ExpenseDocument,
+  type MonthSummary,
 } from "@ocrinvoice/shared";
 
 const documents = new Hono<{ Variables: SessionVariables }>();
@@ -81,8 +88,101 @@ function findByRequestId(userId: string, clientRequestId: string) {
 }
 
 
-// CA-04.1 / CA-04.5 / CA-04.6: the signed-in user's documents from the current month in the phone's time zone,
-// newest first, for one profile only (?context=personal|company): the personal and company lists never mix.
+type SummaryDocumentInput = {
+  total: Prisma.Decimal;
+  category: string;
+  lines?: Array<{ amount: Prisma.Decimal; category: string }>;
+};
+
+function aggregateMonthDocuments(
+  docs: SummaryDocumentInput[],
+  customNames: Map<string, string>,
+): { totalCents: number; byCategory: CategoryBreakdownItem[] } {
+  let totalCents = 0;
+  const byCategoryMap = new Map<string, { cents: number; count: number }>();
+
+  for (const doc of docs) {
+    const docCents = amountToCents(doc.total.toFixed(2));
+    totalCents += docCents;
+
+    // For scanned receipts/invoices with product lines matching the document total, attribute each line
+    // to its own category so multi-category receipts (e.g. Alimente + Beauty) reflect every category accurately.
+    // Only split when every category's net contribution within the document is positive, so category sums always
+    // add up to the exact monthly total (CA-16.2).
+    const lines = doc.lines ?? [];
+    const linesByCategory = new Map<string, number>();
+    let linesSum = 0;
+    for (const line of lines) {
+      const lineCents = amountToCents(line.amount.toFixed(2));
+      linesSum += lineCents;
+      linesByCategory.set(line.category, (linesByCategory.get(line.category) ?? 0) + lineCents);
+    }
+    const canSplitByLines =
+      lines.length > 0 &&
+      linesSum === docCents &&
+      [...linesByCategory.values()].every((cents) => cents > 0);
+
+    if (canSplitByLines) {
+      for (const [category, lineCents] of linesByCategory) {
+        const entry = byCategoryMap.get(category) ?? { cents: 0, count: 0 };
+        entry.cents += lineCents;
+        entry.count += 1;
+        byCategoryMap.set(category, entry);
+      }
+    } else {
+      const entry = byCategoryMap.get(doc.category) ?? { cents: 0, count: 0 };
+      entry.cents += docCents;
+      entry.count += 1;
+      byCategoryMap.set(doc.category, entry);
+    }
+  }
+
+  const sortedCategories = [...byCategoryMap.entries()]
+    .filter(([, { cents }]) => cents > 0)
+    .map(([category, { cents, count }]) => ({
+      category,
+      categoryName: categoryName(category, customNames),
+      total: centsToAmount(cents),
+      count,
+      cents,
+    }))
+    .sort((a, b) => b.cents - a.cents || a.categoryName.localeCompare(b.categoryName, "ro"));
+
+  const shares = computeCategoryShares(sortedCategories.map((item) => item.cents));
+  const byCategory: CategoryBreakdownItem[] = sortedCategories.map(({ cents: _cents, ...item }, index) => ({
+    ...item,
+    percent: shares[index],
+  }));
+
+  return { totalCents, byCategory };
+}
+
+function buildMonthSummary(
+  month: string,
+  previousMonth: string,
+  currentDocuments: SummaryDocumentInput[],
+  previousDocuments: SummaryDocumentInput[],
+  customNames: Map<string, string>,
+): MonthSummary {
+  const current = aggregateMonthDocuments(currentDocuments, customNames);
+  const previous = aggregateMonthDocuments(previousDocuments, customNames);
+  const previousCents = previousDocuments.length > 0 ? previous.totalCents : null;
+
+  return {
+    month,
+    total: centsToAmount(current.totalCents),
+    count: currentDocuments.length,
+    previousMonth,
+    previousTotal: previousCents !== null ? centsToAmount(previousCents) : null,
+    variationPercent: monthVariationPercent(current.totalCents, previousCents),
+    byCategory: current.byCategory,
+    previousByCategory: previous.byCategory,
+  };
+}
+
+// CA-04.1 / CA-04.5 / CA-04.6 / US-05 / US-16: the signed-in user's documents from the current month in the phone's
+// time zone, newest first, for one profile only (?context=personal|company), plus the full month's summary, category
+// breakdown (current and previous month) and variation against the previous month (independent of the ?type= filter).
 documents.get("/", async (c) => {
   const user = c.get("user");
   const context = await resolveContext(user.id, c.req.query("context"));
@@ -97,20 +197,53 @@ documents.get("/", async (c) => {
   const types = DOCUMENT_FILTER_TYPES[filter];
   const today = todayInTimeZone(requestTimeZone(c.req.header("X-Time-Zone")));
   const { start, end } = monthBounds(today);
-  const names = await customCategoryNames(user.id);
+  const prev = previousMonthBounds(today);
+  const currentMonthWhere = {
+    userId: user.id,
+    companyId: context.companyId,
+    date: { gte: utcDate(start), lt: utcDate(end) },
+  };
+  const summarySelect = { total: true, category: true, lines: { select: { amount: true, category: true } } };
 
-  const found = await prisma.document.findMany({
-    where: {
-      userId: user.id,
-      companyId: context.companyId,
-      date: { gte: utcDate(start), lt: utcDate(end) },
-      ...(types ? { type: { in: [...types] } } : {}),
-    },
-    include: documentWithLines,
-    orderBy: [{ date: "desc" }, { time: { sort: "desc", nulls: "last" } }, { createdAt: "desc" }],
+  const [names, found, allCurrentForSummary, previousMonthDocs] = await Promise.all([
+    customCategoryNames(user.id),
+    prisma.document.findMany({
+      where: {
+        ...currentMonthWhere,
+        ...(types ? { type: { in: [...types] } } : {}),
+      },
+      include: documentWithLines,
+      orderBy: [{ date: "desc" }, { time: { sort: "desc", nulls: "last" } }, { createdAt: "desc" }],
+    }),
+    types
+      ? prisma.document.findMany({
+          where: currentMonthWhere,
+          select: summarySelect,
+        })
+      : Promise.resolve(null),
+    prisma.document.findMany({
+      where: {
+        userId: user.id,
+        companyId: context.companyId,
+        date: { gte: utcDate(prev.start), lt: utcDate(prev.end) },
+      },
+      select: summarySelect,
+    }),
+  ]);
+
+  const summary = buildMonthSummary(
+    start.slice(0, 7),
+    prev.start.slice(0, 7),
+    allCurrentForSummary ?? found,
+    previousMonthDocs,
+    names,
+  );
+
+  return c.json({
+    month: start.slice(0, 7),
+    documents: found.map((document) => serializeDocument(document, names)),
+    summary,
   });
-
-  return c.json({ month: start.slice(0, 7), documents: found.map((document) => serializeDocument(document, names)) });
 });
 
 // CA-06.1 / CA-06.2: one document with its lines. Another user's document gets the same 404 as a missing one,

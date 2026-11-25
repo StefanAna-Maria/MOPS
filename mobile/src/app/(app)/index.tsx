@@ -8,6 +8,7 @@ import { AccountMenu } from "@/components/account-menu";
 import { PrimaryButton } from "@/components/primary-button";
 import { ExpenseRow } from "@/components/expense-row";
 import { DocumentFilters } from "@/components/document-filters";
+import { MonthSummaryCard } from "@/components/month-summary-card";
 import { DEFAULT_DOCUMENT_FILTER, formatRecordCount, type DocumentFilter } from "@ocrinvoice/shared";
 import { getGreeting } from "@/lib/greeting";
 import { useProfile } from "@/lib/profile-context";
@@ -15,9 +16,27 @@ import { localTodayIso } from "@/lib/dates";
 import { formatLei, groupByDay } from "@/lib/expense-list";
 import { HOME_MESSAGES } from "@/lib/expense-messages";
 import { useMonthDocuments, type MonthDocumentsState } from "@/lib/use-month-documents";
-import { colors, radius, spacing, typography } from "@/constants/theme";
+import { colors, elevation, radius, spacing, typography } from "@/constants/theme";
 
-function ListState({ state, onRetry }: { state: MonthDocumentsState; onRetry: () => void }) {
+const EMPTY_FILTER_VISUALS: Record<
+  DocumentFilter,
+  { icon: keyof typeof Ionicons.glyphMap; color: string; tint: string }
+> = {
+  ALL: { icon: "wallet-outline", color: colors.primary, tint: colors.primaryTint },
+  RECEIPTS: { icon: "receipt-outline", color: "#0284C7", tint: "#E0F2FE" },
+  INVOICES: { icon: "document-text-outline", color: "#7C3AED", tint: "#EDE9FE" },
+  MANUAL: { icon: "create-outline", color: "#D97706", tint: "#FEF3C7" },
+};
+
+function ListState({
+  state,
+  filter,
+  onRetry,
+}: {
+  state: MonthDocumentsState;
+  filter: DocumentFilter;
+  onRetry: () => void;
+}) {
   if (state.status === "loading") {
     return <ActivityIndicator style={styles.state} color={colors.primary} accessibilityLabel="Se încarcă" />;
   }
@@ -29,7 +48,16 @@ function ListState({ state, onRetry }: { state: MonthDocumentsState; onRetry: ()
       </View>
     );
   }
-  return <Text style={[styles.state, styles.stateText]}>{HOME_MESSAGES.empty}</Text>;
+  const visual = EMPTY_FILTER_VISUALS[filter];
+  return (
+    <View style={styles.emptyCard} testID="empty-documents-card">
+      <View style={[styles.emptyIconCircle, { backgroundColor: visual.tint }]}>
+        <Ionicons name={visual.icon} size={26} color={visual.color} />
+      </View>
+      <Text style={styles.emptyTitle}>{HOME_MESSAGES.emptyByFilter[filter]}</Text>
+      <Text style={styles.emptySubtitle}>{HOME_MESSAGES.empty}</Text>
+    </View>
+  );
 }
 
 export default function HomeScreen() {
@@ -62,6 +90,13 @@ export default function HomeScreen() {
             <Text style={styles.greeting}>
               {getGreeting()}, {profile?.firstName}
             </Text>
+            {state.status !== "error" && (
+              <MonthSummaryCard
+                summary={state.status === "ok" ? state.summary : null}
+                loading={state.status === "loading"}
+                onOpenStatistics={() => router.push("/statistics")}
+              />
+            )}
             <PrimaryButton title="Adaugă o cheltuială" onPress={() => router.push("/add-expense")} />
             <View style={styles.filters}>
               <DocumentFilters value={filter} onChange={setFilter} />
@@ -71,7 +106,7 @@ export default function HomeScreen() {
             </View>
           </View>
         }
-        ListEmptyComponent={<ListState state={state} onRetry={retry} />}
+        ListEmptyComponent={<ListState state={state} filter={filter} onRetry={retry} />}
         renderSectionHeader={({ section }) => (
           <View style={styles.dayHeader} accessibilityRole="header">
             <Text style={styles.dayTitle}>{section.title}</Text>
@@ -176,6 +211,33 @@ const styles = StyleSheet.create({
   },
   stateText: {
     ...typography.bodyMd,
+    color: colors.textSecondary,
+    textAlign: "center",
+  },
+  emptyCard: {
+    ...elevation.level1,
+    marginTop: spacing.lg,
+    borderRadius: radius.lg,
+    paddingVertical: spacing.xl,
+    paddingHorizontal: spacing.lg,
+    alignItems: "center",
+    gap: spacing.sm,
+  },
+  emptyIconCircle: {
+    width: 52,
+    height: 52,
+    borderRadius: radius.full,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: spacing.xs,
+  },
+  emptyTitle: {
+    ...typography.headlineSm,
+    color: colors.textPrimary,
+    textAlign: "center",
+  },
+  emptySubtitle: {
+    ...typography.bodySm,
     color: colors.textSecondary,
     textAlign: "center",
   },

@@ -8,8 +8,52 @@ export const EXPENSE_MESSAGES = {
 
 export const HOME_MESSAGES = {
   empty: "Nicio înregistrare de acest tip în istoric.",
+  emptyByFilter: {
+    ALL: "Nu ai cheltuieli în luna aceasta",
+    RECEIPTS: "Nu ai bonuri în luna aceasta",
+    INVOICES: "Nu ai facturi în luna aceasta",
+    MANUAL: "Nu ai cheltuieli manuale în luna aceasta",
+  },
   loadError: "Nu am putut încărca datele.",
   retry: "Încearcă din nou",
+};
+
+// US-05: monthly total and variation against the previous month on Acasă.
+export const SUMMARY_MESSAGES = {
+  spentInPrefix: "Cheltuit în ",
+  spentIn: (monthName: string) => `Cheltuit în ${monthName}`,
+  vsPreviousMonth: (monthName: string) => `față de ${monthName}`,
+  spentMoreDiff: (diff: string, monthName: string) => `+${diff} mai mult față de ${monthName}`,
+  spentLessDiff: (diff: string, monthName: string) => `${diff} economisiți față de ${monthName}`,
+  spentSameDiff: (monthName: string) => `Același total ca în ${monthName}`,
+  thisMonth: "Luna aceasta",
+  noStatsTitle: (monthName: string) => `Încă nu există statistici pentru ${monthName}`,
+  noStatsSubtitle: "Nu ai încă bonuri, facturi sau cheltuieli manuale înregistrate luna aceasta.",
+  showCategories: "Vezi pe categorii",
+  hideCategories: "Ascunde categoriile",
+  categoryBreakdown: "Distribuție pe categorii",
+  currentMonthCategories: (monthName: string) => `Luna curentă · ${monthName}`,
+  previousMonthCategories: (monthName: string) => `Luna anterioară · ${monthName}`,
+  statExpenses: "Cheltuieli",
+  statCategories: "Categorii",
+  statTopCategory: "Top categorie",
+  openFullStatistics: "Statistici pe categorii",
+};
+
+// US-16: monthly expenses by category screen.
+export const STATISTICS_MESSAGES = {
+  title: "Statistici",
+  back: "Acasă",
+  subtitlePrefix: "Cheltuieli în ",
+  subtitle: (monthName: string) => `Cheltuieli în ${monthName}`,
+  topShareInsight: (name: string, percent: number) => `Cea mai mare pondere: ${name} (${percent}% din total)`,
+  allCategories: "TOATE CATEGORIILE",
+  resetSelection: "Toate categoriile",
+  totalMonth: (monthName: string) => `Total ${monthName}`,
+  categoryCount: (count: number) => (count === 1 ? "1 înregistrare" : `${count} înregistrări`),
+  emptyTitle: (monthName: string) => `Nu ai cheltuieli în ${monthName}`,
+  emptySubtitle: "Nu ai încă bonuri, facturi sau cheltuieli manuale înregistrate luna aceasta.",
+  addExpense: "Adaugă o cheltuială",
 };
 
 export const DOCUMENT_MESSAGES = {
