@@ -66,7 +66,7 @@ function DocumentDetail({ document }: { document: ExpenseDocument }) {
       </View>
 
       <View style={styles.card}>
-        <DetailRow label="Data" value={date} />
+        <DetailRow label={t.document.date} value={date} />
         <DetailRow label={t.document.payment} value={payment} />
         {/* A manual expense always shows its note; a scanned one only when the user added one (US-13). */}
         {document.type === "MANUAL" || document.note ? <DetailRow label={t.document.note} value={document.note ?? "—"} /> : null}

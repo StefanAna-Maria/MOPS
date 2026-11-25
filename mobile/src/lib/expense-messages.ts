@@ -16,57 +16,23 @@ function live<T extends object>(build: () => T): T {
   });
 }
 
-export const HOME_MESSAGES = {
+export const HOME_MESSAGES = live(() => ({
   empty: t().home.empty,
-  emptyByFilter: {
-    ALL: "Nu ai cheltuieli în luna aceasta",
-    RECEIPTS: "Nu ai bonuri în luna aceasta",
-    INVOICES: "Nu ai facturi în luna aceasta",
-    MANUAL: "Nu ai cheltuieli manuale în luna aceasta",
-  },
+  emptyByFilter: t().home.emptyByFilter,
   loadError: t().home.loadError,
   retry: t().common.retry,
-};
+}));
 
 // US-05: monthly total and variation against the previous month on Acasă.
-export const SUMMARY_MESSAGES = {
-  spentInPrefix: "Cheltuit în ",
-  spentIn: (monthName: string) => `Cheltuit în ${monthName}`,
-  vsPreviousMonth: (monthName: string) => `față de ${monthName}`,
-  spentMoreDiff: (diff: string, monthName: string) => `+${diff} mai mult față de ${monthName}`,
-  spentLessDiff: (diff: string, monthName: string) => `${diff} economisiți față de ${monthName}`,
-  spentSameDiff: (monthName: string) => `Același total ca în ${monthName}`,
-  thisMonth: "Luna aceasta",
-  noStatsTitle: (monthName: string) => `Încă nu există statistici pentru ${monthName}`,
-  noStatsSubtitle: "Nu ai încă bonuri, facturi sau cheltuieli manuale înregistrate luna aceasta.",
-  showCategories: "Vezi pe categorii",
-  hideCategories: "Ascunde categoriile",
-  categoryBreakdown: "Distribuție pe categorii",
-  currentMonthCategories: (monthName: string) => `Luna curentă · ${monthName}`,
-  previousMonthCategories: (monthName: string) => `Luna anterioară · ${monthName}`,
-  statExpenses: "Cheltuieli",
-  statCategories: "Categorii",
-  statTopCategory: "Top categorie",
-  openFullStatistics: "Statistici pe categorii",
-};
+export const SUMMARY_MESSAGES = live(() => t().summary);
 
 // US-16: monthly expenses by category screen.
-export const STATISTICS_MESSAGES = {
-  title: "Statistici",
-  back: "Acasă",
-  subtitlePrefix: "Cheltuieli în ",
-  subtitle: (monthName: string) => `Cheltuieli în ${monthName}`,
-  topShareInsight: (name: string, percent: number) => `Cea mai mare pondere: ${name} (${percent}% din total)`,
-  allCategories: "TOATE CATEGORIILE",
-  resetSelection: "Toate categoriile",
-  totalMonth: (monthName: string) => `Total ${monthName}`,
-  categoryCount: (count: number) => (count === 1 ? "1 înregistrare" : `${count} înregistrări`),
-  emptyTitle: (monthName: string) => `Nu ai cheltuieli în ${monthName}`,
-  emptySubtitle: "Nu ai încă bonuri, facturi sau cheltuieli manuale înregistrate luna aceasta.",
-  addExpense: "Adaugă o cheltuială",
-};
+export const STATISTICS_MESSAGES = live(() => ({
+  ...t().statistics,
+  categoryCount: t().home.recordCount,
+}));
 
-export const DOCUMENT_MESSAGES = {
+export const DOCUMENT_MESSAGES = live(() => ({
   notFound: t().document.notFound,
   delete: t().document.delete,
   confirmTitle: t().document.confirmTitle,
@@ -75,7 +41,7 @@ export const DOCUMENT_MESSAGES = {
   cancel: t().common.cancel,
   deleteFailedTitle: t().document.deleteFailedTitle,
   deleteFailed: t().common.tryAgain,
-};
+}));
 
 export const EXPENSE_MESSAGES = live(() => t().expense.errors);
 

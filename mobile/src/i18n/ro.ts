@@ -48,6 +48,21 @@ export const ro = {
       "NOIEMBRIE",
       "DECEMBRIE",
     ],
+    /** US-05 / US-16: the month inside a sentence ("Cheltuit în noiembrie"). */
+    monthNames: [
+      "ianuarie",
+      "februarie",
+      "martie",
+      "aprilie",
+      "mai",
+      "iunie",
+      "iulie",
+      "august",
+      "septembrie",
+      "octombrie",
+      "noiembrie",
+      "decembrie",
+    ],
   },
   welcome: {
     slides: [
@@ -206,6 +221,12 @@ export const ro = {
     addExpense: "Adaugă o cheltuială",
     scan: "Fotografiază un bon",
     empty: "Nicio înregistrare de acest tip în istoric.",
+    emptyByFilter: {
+      ALL: "Nu ai cheltuieli în luna aceasta",
+      RECEIPTS: "Nu ai bonuri în luna aceasta",
+      INVOICES: "Nu ai facturi în luna aceasta",
+      MANUAL: "Nu ai cheltuieli manuale în luna aceasta",
+    } as Record<string, string>,
     loadError: "Nu am putut încărca datele.",
     recordCount: (count: number) => {
       if (count === 1) {
@@ -214,6 +235,39 @@ export const ro = {
       const lastTwo = count % 100;
       return count === 0 || (lastTwo >= 1 && lastTwo <= 19) ? `${count} înregistrări` : `${count} de înregistrări`;
     },
+  },
+  // US-05: the month's total on Acasă and its variation against the previous month.
+  summary: {
+    loading: "Se încarcă rezumatul lunii",
+    spentInPrefix: "Cheltuit în ",
+    vsPreviousMonth: (month: string) => `față de ${month}`,
+    spentMoreDiff: (diff: string, month: string) => `+${diff} mai mult față de ${month}`,
+    spentLessDiff: (diff: string, month: string) => `${diff} economisiți față de ${month}`,
+    spentSameDiff: (month: string) => `Același total ca în ${month}`,
+    thisMonth: "Luna aceasta",
+    noStatsTitle: (month: string) => `Încă nu există statistici pentru ${month}`,
+    noStatsSubtitle: "Nu ai încă bonuri, facturi sau cheltuieli manuale înregistrate luna aceasta.",
+    showCategories: "Vezi pe categorii",
+    hideCategories: "Ascunde categoriile",
+    currentMonthCategories: (month: string) => `Luna curentă · ${month}`,
+    previousMonthCategories: (month: string) => `Luna anterioară · ${month}`,
+    statExpenses: "Cheltuieli",
+    statCategories: "Categorii",
+    statTopCategory: "Top categorie",
+    openFullStatistics: "Statistici pe categorii",
+  },
+  // US-16: the month's expenses by category.
+  statistics: {
+    title: "Statistici",
+    back: "Acasă",
+    subtitlePrefix: "Cheltuieli în ",
+    topShareInsight: (name: string, percent: number) => `Cea mai mare pondere: ${name} (${percent}% din total)`,
+    allCategories: "TOATE CATEGORIILE",
+    resetSelection: "Toate categoriile",
+    totalMonth: (month: string) => `Total ${month}`,
+    emptyTitle: (month: string) => `Nu ai cheltuieli în ${month}`,
+    emptySubtitle: "Nu ai încă bonuri, facturi sau cheltuieli manuale înregistrate luna aceasta.",
+    addExpense: "Adaugă o cheltuială",
   },
   filters: {
     ALL: "Toate",
@@ -288,6 +342,7 @@ export const ro = {
   },
   document: {
     notFound: "Documentul nu a fost găsit.",
+    date: "Data",
     payment: "Plată",
     note: "Notă",
     products: "PRODUSE",
@@ -309,6 +364,9 @@ export const ro = {
     saveFailedTitle: "Nu am putut salva modificările",
   },
   camera: {
+    title: "Fotografiază bonul",
+    previewTitle: "Verifică poza",
+    permissionTitle: "Acces la cameră",
     permissionDenied:
       "Ai refuzat accesul la cameră. Pentru a fotografia un bon și a nu-l mai păstra pe hârtie, activează permisiunea din setările telefonului.",
     permissionNeeded:
