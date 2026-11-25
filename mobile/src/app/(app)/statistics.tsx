@@ -6,14 +6,13 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import {
   amountToCents,
   computeCategoryShares,
-  formatDisplayDate,
-  monthNameRo,
   type CategoryBreakdownItem,
   type ExpenseDocument,
 } from "@ocrinvoice/shared";
 import { PrimaryButton } from "@/components/primary-button";
 import { categoryVisual } from "@/lib/category-visuals";
-import { formatLei } from "@/lib/expense-list";
+import { categoryLabel, formatLei } from "@/lib/expense-list";
+import { formatDate, monthName, useT } from "@/i18n";
 import { HOME_MESSAGES, STATISTICS_MESSAGES } from "@/lib/expense-messages";
 import { useProfile } from "@/lib/profile-context";
 import { useMonthDocuments } from "@/lib/use-month-documents";
@@ -59,6 +58,7 @@ function documentsForCategory(documents: ExpenseDocument[], categoryId: string):
  * ordered descending by amount, with exact lei totals (summing to the month total) and integer shares (summing to 100%).
  */
 export default function StatisticsScreen() {
+  const t = useT();
   const { activeContext, company } = useProfile();
   const { state, retry } = useMonthDocuments(activeContext, "ALL");
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -67,7 +67,7 @@ export default function StatisticsScreen() {
   const barProgress = useRef(new Animated.Value(IS_TEST ? 1 : 0)).current;
   const glowPulse = useRef(new Animated.Value(0)).current;
 
-  const profileLabel = activeContext === "company" && company ? company.name : "Personal";
+  const profileLabel = activeContext === "company" && company ? company.name : t.profile.personal;
   const summary = state.status === "ok" ? state.summary : null;
   const documents = state.status === "ok" ? state.documents : [];
   const hasPrevious = (summary?.previousByCategory?.length ?? 0) > 0;
@@ -120,8 +120,8 @@ export default function StatisticsScreen() {
     return () => anim.stop();
   }, [dataKey, summary, barProgress]);
 
-  const currentMonthLabel = summary ? monthNameRo(summary.month) : "";
-  const previousMonthLabel = summary ? monthNameRo(summary.previousMonth) : "";
+  const currentMonthLabel = summary ? monthName(summary.month) : "";
+  const previousMonthLabel = summary ? monthName(summary.previousMonth) : "";
   const isPrevious = activePeriod === "previous";
   const monthLabel = isPrevious ? previousMonthLabel : currentMonthLabel;
   const totalCents = summary
@@ -144,6 +144,8 @@ export default function StatisticsScreen() {
   const categories: Array<CategoryBreakdownItem & { cents: number; share: number }> = rawCategories.map(
     (item, index) => ({
       ...item,
+      // US-17: a built-in category in the app's language (the server names them in Romanian).
+      categoryName: categoryLabel(item.category, item.categoryName),
       share: typeof item.percent === "number" ? item.percent : fallbackShares[index],
     }),
   );
@@ -186,7 +188,7 @@ export default function StatisticsScreen() {
 
       {state.status === "loading" ? (
         <View style={styles.centerState}>
-          <ActivityIndicator color={colors.primary} accessibilityLabel="Se încarcă" />
+          <ActivityIndicator color={colors.primary} accessibilityLabel={t.common.loading} />
         </View>
       ) : state.status === "error" ? (
         <View style={styles.centerState}>
@@ -400,7 +402,7 @@ export default function StatisticsScreen() {
                               <Text style={styles.drilldownMerchant} numberOfLines={1}>
                                 {document.merchant}
                               </Text>
-                              <Text style={styles.drilldownDate}>{formatDisplayDate(document.date)}</Text>
+                              <Text style={styles.drilldownDate}>{formatDate(document.date)}</Text>
                             </View>
                             <View style={styles.drilldownRight}>
                               <Text style={styles.drilldownAmount}>{formatLei(amountCents)}</Text>

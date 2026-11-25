@@ -105,6 +105,12 @@ export function formatMoney(cents: number, language: Language = getLanguage()): 
   return `${sign}${units.replace(/\B(?=(\d{3})+(?!\d))/g, ".")},${decimals} lei`;
 }
 
+/** US-05 / US-16: "2026-11" or "2026-11-14" → "noiembrie" in Romanian, "November" in English. */
+export function monthName(yearMonthOrDate: string, language: Language = getLanguage()): string {
+  const index = Number(yearMonthOrDate.split("-")[1]) - 1;
+  return MESSAGES[language].dates.monthNames[index] ?? yearMonthOrDate;
+}
+
 /** CA-17.3: "2026-11-21" → "21.11.2026" in Romanian, "11/21/2026" in English. */
 export function formatDate(isoDate: string, language: Language = getLanguage()): string {
   const [year, month, day] = isoDate.split("-");

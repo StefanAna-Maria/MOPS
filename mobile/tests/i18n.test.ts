@@ -6,12 +6,14 @@ import {
   formatMoney,
   getLanguage,
   loadLanguageSetting,
+  monthName,
   setLanguageSetting,
   t,
 } from "@/i18n";
 import { en } from "@/i18n/en";
 import { ro } from "@/i18n/ro";
-import { formatLei, dayLabel } from "@/lib/expense-list";
+import { categoryLabel, formatLei, dayLabel } from "@/lib/expense-list";
+import { HOME_MESSAGES, STATISTICS_MESSAGES, SUMMARY_MESSAGES } from "@/lib/expense-messages";
 import { getGreeting } from "@/lib/greeting";
 
 jest.mock("expo-secure-store", () => ({ getItemAsync: jest.fn(), setItemAsync: jest.fn(async () => {}) }));
@@ -130,5 +132,36 @@ describe("the dictionaries", () => {
     expect(en.welcome.slides).toHaveLength(ro.welcome.slides.length);
     expect(en.dates.weekdays).toHaveLength(7);
     expect(en.dates.months).toHaveLength(12);
+    expect(en.dates.monthNames).toHaveLength(12);
+  });
+});
+
+describe("US-05 / US-16: the month's summary and statistics follow the language", () => {
+  it("names the month in the app's language", () => {
+    expect(monthName("2026-11")).toBe("noiembrie");
+    setLanguageSetting("en");
+    expect(monthName("2026-11")).toBe("November");
+    expect(monthName("2026-01-14")).toBe("January");
+  });
+
+  it("switches the summary, statistics and empty-list texts at once (CA-17.2)", () => {
+    expect(SUMMARY_MESSAGES.spentLessDiff("20,00 lei", "octombrie")).toBe("20,00 lei economisiți față de octombrie");
+    expect(HOME_MESSAGES.emptyByFilter.INVOICES).toBe("Nu ai facturi în luna aceasta");
+    expect(STATISTICS_MESSAGES.categoryCount(20)).toBe("20 de înregistrări");
+
+    setLanguageSetting("en");
+    expect(SUMMARY_MESSAGES.spentInPrefix + monthName("2026-11")).toBe("Spent in November");
+    expect(SUMMARY_MESSAGES.spentLessDiff(formatLei(2000), monthName("2026-10"))).toBe(
+      "20.00 RON saved compared to October",
+    );
+    expect(HOME_MESSAGES.emptyByFilter.INVOICES).toBe("You have no invoices this month");
+    expect(STATISTICS_MESSAGES.title).toBe("Statistics");
+    expect(STATISTICS_MESSAGES.categoryCount(20)).toBe("20 records");
+  });
+
+  it("names a built-in category in the app's language, and keeps the user's own name", () => {
+    setLanguageSetting("en");
+    expect(categoryLabel("GROCERIES", "Alimente")).toBe(en.categories.GROCERIES);
+    expect(categoryLabel("cmwujd9qb0000x4uoqhfkjt6x", "Sală de sport")).toBe("Sală de sport");
   });
 });

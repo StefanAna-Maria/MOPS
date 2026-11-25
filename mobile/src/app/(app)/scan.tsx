@@ -101,7 +101,7 @@ export default function ScanScreen() {
                 <Ionicons name="camera-outline" size={40} color={colors.primary} />
               </View>
               <Text style={styles.permissionTitle} accessibilityRole="header">
-                Acces la cameră
+                {t.camera.permissionTitle}
               </Text>
               <Text style={styles.permissionDescription}>
                 {isPermanentlyDenied
@@ -223,7 +223,7 @@ export default function ScanScreen() {
             <Ionicons name="close" size={24} color={colors.white} />
           </Pressable>
           <Text style={styles.topBarTitle} accessibilityRole="header">
-            Verifică poza
+            {t.camera.previewTitle}
           </Text>
           <View style={styles.topBarSpacer} />
         </View>
@@ -289,7 +289,7 @@ export default function ScanScreen() {
             <Ionicons name="close" size={24} color={colors.white} />
           </Pressable>
           <Text style={styles.topBarTitle} accessibilityRole="header">
-            Fotografiază bonul
+            {t.camera.title}
           </Text>
           <View style={styles.topBarSpacer} />
         </View>

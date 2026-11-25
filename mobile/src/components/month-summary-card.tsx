@@ -5,13 +5,13 @@ import {
   amountToCents,
   computeCategoryShares,
   formatVariationPercent,
-  monthNameRo,
   type CategoryBreakdownItem,
   type MonthSummary,
 } from "@ocrinvoice/shared";
 import { categoryVisual } from "@/lib/category-visuals";
-import { formatLei } from "@/lib/expense-list";
+import { categoryLabel, formatLei } from "@/lib/expense-list";
 import { SUMMARY_MESSAGES } from "@/lib/expense-messages";
+import { monthName, useT } from "@/i18n";
 import { colors, fonts, radius, spacing, typography } from "@/constants/theme";
 
 const IS_TEST = process.env.NODE_ENV === "test";
@@ -33,6 +33,8 @@ function prepareCategoryRows(items: CategoryBreakdownItem[]): CategoryRowData[] 
   const shares = computeCategoryShares(positive.map((item) => item.cents));
   return positive.map((item, index) => ({
     ...item,
+    // US-17: a built-in category in the app's language (the server names them in Romanian); the user's own as named.
+    categoryName: categoryLabel(item.category, item.categoryName),
     share: typeof item.percent === "number" ? item.percent : shares[index],
     color: categoryVisual(item.category).color,
   }));
@@ -51,6 +53,8 @@ type MonthSummaryCardProps = {
  * expenses yet in the current month, hides the statistics and displays a clean empty-statistics message instead.
  */
 export function MonthSummaryCard({ summary, loading = false, onOpenStatistics }: MonthSummaryCardProps) {
+  // Re-render in the new language when it changes (CA-17.2): the texts come from SUMMARY_MESSAGES.
+  useT();
   const [expanded, setExpanded] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
@@ -176,7 +180,7 @@ export function MonthSummaryCard({ summary, loading = false, onOpenStatistics }:
     return (
       <View
         style={styles.card}
-        accessibilityLabel="Se încarcă rezumatul lunii"
+        accessibilityLabel={SUMMARY_MESSAGES.loading}
         testID="month-summary-skeleton"
       >
         <View style={styles.glowTopRight} pointerEvents="none" />
@@ -188,8 +192,8 @@ export function MonthSummaryCard({ summary, loading = false, onOpenStatistics }:
     );
   }
 
-  const currentMonthLabel = monthNameRo(summary.month);
-  const previousMonthLabel = monthNameRo(summary.previousMonth);
+  const currentMonthLabel = monthName(summary.month);
+  const previousMonthLabel = monthName(summary.previousMonth);
   const hasCurrentMonthExpenses = summary.count > 0;
   const previousCents = summary.previousTotal !== null ? amountToCents(summary.previousTotal) : null;
   const variation = summary.variationPercent;
