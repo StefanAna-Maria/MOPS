@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { router, useLocalSearchParams } from "expo-router";
+import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
   PAYMENT_METHOD_LABELS,
@@ -14,7 +14,7 @@ import { PrimaryButton } from "@/components/primary-button";
 import { apiFetch } from "@/lib/api";
 import { showServerUnavailable } from "@/lib/alerts";
 import { amountToCents, documentSubtitle, formatLei } from "@/lib/expense-list";
-import { DOCUMENT_MESSAGES, HOME_MESSAGES, REVIEW_MESSAGES } from "@/lib/expense-messages";
+import { DOCUMENT_MESSAGES, EDIT_MESSAGES, HOME_MESSAGES, REVIEW_MESSAGES } from "@/lib/expense-messages";
 import { colors, elevation, radius, spacing, typography } from "@/constants/theme";
 
 type DocumentState =
@@ -71,8 +71,8 @@ function DocumentDetail({ document }: { document: ExpenseDocument }) {
       <View style={styles.card}>
         <DetailRow label="Data" value={date} />
         <DetailRow label="Plată" value={payment} />
-        {/* Only a manual expense has a note (typed by the user); a scanned receipt or invoice has none. */}
-        {document.type === "MANUAL" ? <DetailRow label="Notă" value={document.note ?? "—"} /> : null}
+        {/* A manual expense always shows its note; a scanned one only when the user added one (US-13). */}
+        {document.type === "MANUAL" || document.note ? <DetailRow label="Notă" value={document.note ?? "—"} /> : null}
       </View>
 
       {showProducts ? (
@@ -117,19 +117,23 @@ export default function DocumentScreen() {
 
   const documentId = id ? String(id) : "";
 
-  useEffect(() => {
-    let ignore = false;
-    async function loadDocument() {
-      const next: DocumentState = documentId ? await fetchDocument(documentId) : { status: "notFound" };
-      if (!ignore) {
-        setState(next);
+  // Loads the document, and again each time the screen comes back into focus, e.g. after saving a correction
+  // (CA-13.2). A failed reload keeps the document already shown.
+  useFocusEffect(
+    useCallback(() => {
+      let ignore = false;
+      async function loadDocument() {
+        const next: DocumentState = documentId ? await fetchDocument(documentId) : { status: "notFound" };
+        if (!ignore) {
+          setState((previous) => (previous.status === "ok" && next.status === "error" ? previous : next));
+        }
       }
-    }
-    loadDocument();
-    return () => {
-      ignore = true;
-    };
-  }, [documentId]);
+      loadDocument();
+      return () => {
+        ignore = true;
+      };
+    }, [documentId]),
+  );
 
   const retry = useCallback(async () => {
     setState({ status: "loading" });
@@ -194,7 +198,12 @@ export default function DocumentScreen() {
         {state.status === "ok" ? (
           <>
             <DocumentDetail document={state.document} />
-            <View style={styles.deleteArea}>
+            <View style={styles.actions}>
+              <PrimaryButton
+                title={EDIT_MESSAGES.open}
+                variant="outline"
+                onPress={() => router.push({ pathname: "/edit-document/[id]", params: { id: state.document.id } })}
+              />
               <PrimaryButton
                 title={DOCUMENT_MESSAGES.delete}
                 variant="dangerOutline"
@@ -239,7 +248,8 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     gap: spacing.lg,
   },
-  deleteArea: {
+  actions: {
+    gap: spacing.md,
     marginTop: spacing.xl,
     paddingTop: spacing.xl,
     borderTopWidth: 1,

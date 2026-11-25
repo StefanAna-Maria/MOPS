@@ -113,6 +113,64 @@ documents.get("/:id", async (c) => {
   return c.json({ document: serializeDocument(document, await customCategoryNames(user.id)) });
 });
 
+/** US-13: the fields of an edit, as the app sends them (`merchant` is the manual expense's description). */
+const EDIT_FIELDS = ["merchant", "amount", "date", "category", "paymentMethod"] as const;
+
+const EDIT_FIELD_OF_VALIDATION = { description: "merchant" } as const;
+
+// CA-13.1 / CA-13.2: corrects a saved document: merchant, date, amount, category, payment and note, with the same
+// checks as when an expense is added (CA-03). The app sends all of them (the note may be left out to have none).
+// A manual expense has one product named and valued like the expense, which follows the edit; the products of a
+// scanned receipt or invoice stay as they were read and checked (only the document's own values change).
+// Another user's document gets the same 404 as a missing one.
+documents.patch("/:id", async (c) => {
+  const user = c.get("user");
+  const existing = await prisma.document.findFirst({
+    where: { id: c.req.param("id"), userId: user.id },
+    include: documentWithLines,
+  });
+  if (!existing) {
+    return c.json({ code: "DOCUMENT_NOT_FOUND" }, 404);
+  }
+
+  const body = await c.req.json().catch(() => null);
+  const data = (typeof body === "object" && body !== null ? body : {}) as Record<string, unknown>;
+  // validateManualExpense gives a missing category or payment a default; an edit must not reset them silently.
+  const missing = EDIT_FIELDS.filter((field) => data[field] === undefined);
+  if (missing.length > 0) {
+    return c.json({ code: "INVALID_EXPENSE", fields: missing }, 400);
+  }
+
+  const today = todayInTimeZone(requestTimeZone(c.req.header("X-Time-Zone")));
+  const result = validateManualExpense({ ...data, description: data.merchant }, today);
+  if (!result.ok) {
+    const fields = result.fields.map((field) => EDIT_FIELD_OF_VALIDATION[field as "description"] ?? field);
+    return c.json({ code: "INVALID_EXPENSE", fields }, 400);
+  }
+  const edited = result.value;
+  // US-03: a category the user created must be theirs (a built-in code is always fine).
+  if (!(await isUsersCategory(user.id, edited.category))) {
+    return c.json({ code: "INVALID_EXPENSE", fields: ["category"] }, 400);
+  }
+
+  const updated = await prisma.document.update({
+    where: { id: existing.id },
+    data: {
+      merchant: edited.description,
+      date: utcDate(edited.date),
+      total: edited.amount,
+      category: edited.category,
+      paymentMethod: edited.paymentMethod,
+      note: edited.note,
+      ...(existing.type === "MANUAL"
+        ? { lines: { updateMany: { where: {}, data: { name: edited.description, amount: edited.amount, category: edited.category } } } }
+        : {}),
+    },
+    include: documentWithLines,
+  });
+  return c.json({ document: serializeDocument(updated, await customCategoryNames(user.id)) });
+});
+
 // CA-07.1 / CA-07.2: deletes one of the signed-in user's documents with its lines, so it leaves the list and the
 // totals. Another user's document gets the same 404 as a missing one. A scanned photo stays stored (see US-12).
 documents.delete("/:id", async (c) => {
