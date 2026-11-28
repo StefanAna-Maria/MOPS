@@ -1,4 +1,8 @@
-import { StyleSheet, Text, View } from "react-native";
+import { useRef, useState } from "react";
+import { Alert, StyleSheet, Text, View } from "react-native";
+import { DeleteAccountSheet } from "@/components/delete-account-sheet";
+import { showServerUnavailable } from "@/lib/alerts";
+import { deleteAccount } from "@/lib/delete-account";
 import { router } from "expo-router";
 import Constants from "expo-constants";
 import { Screen } from "@/components/screen";
@@ -25,6 +29,33 @@ export default function SettingsScreen() {
   const fullName = [profile?.firstName, profile?.lastName].filter(Boolean).join(" ");
   const languageValue =
     setting === "auto" ? `${t.language.auto} (${t.language.names[language]})` : t.language.names[setting];
+
+  const [confirming, setConfirming] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const deleteStarted = useRef(false);
+
+  // US-12: only reached from the confirmation sheet.
+  async function handleDeleteAccount() {
+    if (deleteStarted.current) {
+      return;
+    }
+    deleteStarted.current = true;
+    setDeleting(true);
+    try {
+      const deleted = await deleteAccount();
+      setConfirming(false);
+      if (!deleted) {
+        Alert.alert(t.deleteAccount.failedTitle, t.common.tryAgain);
+      }
+      // Once signed out, the root layout opens "Intră în cont".
+    } catch {
+      setConfirming(false);
+      showServerUnavailable();
+    } finally {
+      deleteStarted.current = false;
+      setDeleting(false);
+    }
+  }
 
   async function handleSignOut() {
     try {
@@ -85,7 +116,14 @@ export default function SettingsScreen() {
 
       <View style={styles.signOut}>
         <PrimaryButton title={t.settings.signOut} variant="dangerOutline" onPress={handleSignOut} />
+        <PrimaryButton title={t.deleteAccount.open} variant="danger" onPress={() => setConfirming(true)} />
       </View>
+      <DeleteAccountSheet
+        visible={confirming}
+        deleting={deleting}
+        onConfirm={handleDeleteAccount}
+        onCancel={() => setConfirming(false)}
+      />
       <BackLink>{t.common.back}</BackLink>
     </Screen>
   );
@@ -128,5 +166,6 @@ const styles = StyleSheet.create({
   },
   signOut: {
     marginTop: spacing.sm,
+    gap: spacing.md,
   },
 });

@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { prisma } from "../lib/prisma.js";
+import { deleteAccount } from "../lib/delete-account.js";
 import { requireSession, type SessionVariables } from "../lib/session.js";
 
 const me = new Hono<{ Variables: SessionVariables }>();
@@ -43,6 +44,12 @@ me.patch("/", async (c) => {
     },
   });
   return c.json({ profile });
+});
+
+// US-12: deletes the signed-in user's own account with everything it holds. The app asks for confirmation first.
+me.delete("/", async (c) => {
+  await deleteAccount(c.get("user"));
+  return c.body(null, 204);
 });
 
 me.post("/personal", async (c) => {

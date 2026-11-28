@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 /** Where uploaded photos are kept (UPLOAD_DIR, default "uploads" next to the server). Never inside git. */
@@ -34,6 +34,11 @@ export async function saveUpload(storageKey: string, bytes: Uint8Array) {
 
 export function readUpload(storageKey: string) {
   return readFile(resolveKey(storageKey));
+}
+
+/** US-12: removes every file a user uploaded (photos and original PDFs, all kept under "<userId>/"). */
+export async function deleteUserUploads(userId: string) {
+  await rm(resolveKey(userId), { recursive: true, force: true });
 }
 
 /** The image type from the file's first bytes (its "magic number"), or null when it is not a JPEG, PNG or WebP. */

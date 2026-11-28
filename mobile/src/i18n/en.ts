@@ -207,6 +207,13 @@ export const en: Messages = {
     version: "App version",
     signOut: "Sign out",
   },
+  deleteAccount: {
+    open: "Delete account",
+    confirmTitle: "Delete your account?",
+    confirmText: "Your account, documents, photos and all your data will be deleted for good. They cannot be recovered.",
+    confirm: "Delete for good",
+    failedTitle: "We could not delete your account",
+  },
   language: {
     title: "Language",
     subtitle: "Choose the app's language. It changes right away.",
