@@ -130,7 +130,8 @@ export const auth = betterAuth({
   ],
   trustedOrigins: [
     "ocrinvoice://",
-    ...(process.env.NODE_ENV === "development"
+    ...(process.env.NODE_ENV === "development" ||
+    process.env.ALLOW_EXPO_GO === "true"
       ? ["exp://", "exp://**", "exp://192.168.*.*:*/**"]
       : []),
   ],
