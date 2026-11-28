@@ -82,8 +82,10 @@ Deschide `server/.env` și completează:
 | `BETTER_AUTH_SECRET` | Un text secret lung, generat de tine (comanda de mai jos) |
 | `BETTER_AUTH_URL` | `http://localhost:3000` |
 | `NODE_ENV` | **`development`** — obligatoriu, altfel serverul refuză logarea din Expo Go |
-| `RESEND_API_KEY` | Lasă gol: codurile de confirmare apar atunci în fereastra serverului |
+| `GMAIL_USER`, `GMAIL_APP_PASSWORD` | Lasă goale: codurile de confirmare apar atunci în fereastra serverului. Ca să trimiți emailuri reale, vezi „Emailuri prin Gmail” |
+| `RESEND_API_KEY` | Lasă gol |
 | `EMAIL_FROM` | Lasă cum e |
+| `ALLOW_EXPO_GO` | Lasă gol (se folosește doar pe Vercel) |
 | `OCR_URL` | `http://127.0.0.1:8080` (unde rulează llama.cpp) |
 | `OCR_TIMEOUT_MS` | `300000` (5 minute) |
 | `UPLOAD_DIR` | `uploads` (pozele scanate se salvează în `server/uploads/`, care nu intră în git) |
@@ -95,6 +97,20 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 ```
 
 Copiază rezultatul în `.env`. **Nu pune niciodată `.env` în git** (e deja în `.gitignore`).
+
+#### Emailuri prin Gmail (opțional)
+
+Gmail trimite gratuit codurile către orice adresă (aproximativ 500 de emailuri pe zi). E bine să folosești un cont Google creat special pentru aplicație.
+
+1. În contul Google: **Securitate** → activează **Verificarea în 2 pași**.
+2. Deschide https://myaccount.google.com/apppasswords, scrie un nume (ex. `MOPS`) și copiază parola de 16 litere (se afișează o singură dată).
+3. Completează în `server/.env` (și, pentru producție, în Vercel → **Environment Variables**, urmat de **Redeploy**):
+   ```
+   GMAIL_USER="adresa-aplicatiei@gmail.com"
+   GMAIL_APP_PASSWORD="parola de 16 litere"
+   ```
+
+Când sunt completate amândouă, se folosește Gmail (și nu Resend). Parola de aplicație e un secret: nu o pune în git și nu o trimite în chat. Dacă ajunge unde nu trebuie, șterge-o din pagina de mai sus și creează alta.
 
 ### 3.2 Fișierul `server/.env.test` (doar dacă rulezi testele)
 
@@ -170,7 +186,7 @@ Aplicația găsește singură serverul pe calculatorul tău (aceeași adresă ca
 ## 6. Creează-ți un cont
 
 1. În aplicație: **Creează cont**, cu emailul tău și o parolă (minimum 8 caractere, o cifră, o literă mare).
-2. Codul de confirmare de 6 cifre **nu vine pe email** (fără `RESEND_API_KEY`): îl găsești în fereastra serverului, pe o linie de forma
+2. Fără un serviciu de email configurat, codul de confirmare de 6 cifre **nu vine pe email**: îl găsești în fereastra serverului, pe o linie de forma
    ```
    [email-otp] email-verification tu@exemplu.ro: 123456
    ```
@@ -272,7 +288,7 @@ Apoi repornește serverul (Ctrl+C și `npm run dev`) și Expo (Ctrl+C și `npx e
 |---|---|---|
 | „Serverul nu răspunde” în aplicație | Telefonul nu ajunge la calculator | Același Wi-Fi? Serverul pornit (fereastra 1)? Pe Windows: permite Node.js în paravanul de protecție pentru rețele private. |
 | Logarea eșuează din aplicație, deși parola e bună | Adresa rețelei nu începe cu `192.168.` sau `NODE_ENV` nu e `development` | Verifică `NODE_ENV="development"` în `server/.env`. Serverul acceptă în dezvoltare doar adrese `192.168.*`: folosește o rețea Wi-Fi de acest tip (sau hotspotul telefonului). |
-| Nu primesc codul de confirmare pe email | Fără `RESEND_API_KEY` emailurile nu se trimit | Caută `[email-otp]` în fereastra serverului. |
+| Nu primesc codul de confirmare pe email | Fără Gmail sau Resend configurat, emailurile nu se trimit; cu Gmail, parola de aplicație poate fi greșită | Local: caută `[email-otp]` în fereastra serverului. Cu Gmail: caută `Failed to run background task` în log (`Invalid login` = parolă de aplicație greșită) și verifică folderul Spam. |
 | `Documentul nu a putut fi citit. Serviciul de citire nu răspunde.` | llama.cpp nu rulează sau a rămas fără memorie | Pornește fereastra 3 (pasul 7.3), cu `-c 16384 -np 1`. Verifică http://127.0.0.1:8080/health. |
 | `Citirea a durat prea mult` | Calculator lent (fără placă video) sau bon foarte lung | Mărește `OCR_TIMEOUT_MS` în `server/.env` (de exemplu `600000` = 10 minute) și repornește serverul. |
 | Etapele de citire rămân la „Citim documentul” până la final | Serverul nu primește răspunsul llama.cpp pe bucăți (streaming) | Actualizează la ultima versiune din `main` (repararea din 21.11.2026) și repornește serverul. |
