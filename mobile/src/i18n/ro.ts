@@ -210,6 +210,14 @@ export const ro = {
     version: "Versiunea aplicației",
     signOut: "Deconectează-te",
   },
+  deleteAccount: {
+    open: "Șterge contul",
+    confirmTitle: "Ștergi contul?",
+    confirmText:
+      "Contul, documentele, pozele și toate datele tale vor fi șterse definitiv. Nu mai pot fi recuperate.",
+    confirm: "Șterge definitiv",
+    failedTitle: "Nu am putut șterge contul",
+  },
   language: {
     title: "Limba",
     subtitle: "Alege limba aplicației. Se schimbă imediat.",
